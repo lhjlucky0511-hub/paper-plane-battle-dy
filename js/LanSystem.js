@@ -1,6 +1,12 @@
 // 局域网联机系统 - 基于 WebSocket 的主机-客户端架构
 // 抖音小游戏不支持直接 TCP/UDP 广播，使用 WebSocket 中转服务器
 // 对应原项目 LanNetworkHub.cs / LanModels.cs
+//
+// 服务器地址配置：
+//   - 本机调试: 'ws://192.168.x.x:8080'（需在开发者工具勾选"不校验合法域名"）
+//   - Render 免费云: 'wss://你的服务名.onrender.com'
+//   - 自建服务器: 'wss://你的域名.com'
+const SERVER_URL = 'wss://你的服务器地址.onrender.com';  // ← 在这里修改服务器地址
 
 const CONSTS = require('./constants')
 
@@ -109,14 +115,15 @@ class LanNetwork {
   }
 
   // 连接到 WebSocket 服务器
-  connect(serverUrl, callback) {
+  connect(callback, serverUrl) {
+    const url = serverUrl || SERVER_URL
     if (typeof tt === 'undefined') {
       callback && callback(new Error('抖音环境不可用'))
       return
     }
 
     this.socket = tt.connectSocket({
-      url: serverUrl,
+      url: url,
       success: () => {
         console.log('[LAN] 连接中...')
       },
