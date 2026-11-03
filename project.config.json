@@ -1,0 +1,17 @@
+{
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": false,
+    "minified": false
+  },
+  "compileType": "game",
+  "libVersion": "2.19.0",
+  "appid": "tt0000000000000000",
+  "projectname": "paper-plane-battle-dy",
+  "condition": {},
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  }
+}
