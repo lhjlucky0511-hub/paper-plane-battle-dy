@@ -19,15 +19,21 @@ class InputManager {
       fire: false,
       missile: false,
       net: false,
-      boost: false
+      boost: false,
+      stunt: false
     }
 
     // 按钮是否被首次按下（用于触发一次性动作）
     this.buttonPressed = {
       fire: false,
       missile: false,
-      net: false
+      net: false,
+      stunt: false
     }
+
+    // 当前选中的特技类型
+    this.selectedStunt = 1  // 默认英麦曼
+    this.stuntReqId = 0
 
     // 触摸点追踪
     this.touches = {}
@@ -36,6 +42,7 @@ class InputManager {
     this.missileTouchId = null
     this.netTouchId = null
     this.boostTouchId = null
+    this.stuntTouchId = null
 
     // 虚拟按钮位置（需要在 init 时根据屏幕尺寸设置）
     this.uiLayout = null
@@ -111,6 +118,14 @@ class InputManager {
     } else if (this._pointInRect(clientX, clientY, layout.fire)) {
       this.buttons.fire = true
       this.fireTouchId = identifier
+    } else if (layout.stunt && this._pointInRect(clientX, clientY, layout.stunt)) {
+      // 特技按钮：每次按下触发当前选中的特技
+      this.stuntReqId++
+      this.buttonPressed.stunt = true
+      this.stuntTouchId = identifier
+    } else if (layout.stuntSelect && this._pointInRect(clientX, clientY, layout.stuntSelect)) {
+      // 特技选择按钮：切换特技类型
+      this.selectedStunt = (this.selectedStunt % 4) + 1
     } else {
       // 默认左下为摇杆
       if (clientX < this._screenWidth() * 0.4 && !this.joystick.active) {
@@ -146,6 +161,9 @@ class InputManager {
     if (identifier === this.boostTouchId) {
       this.buttons.boost = false
       this.boostTouchId = null
+    }
+    if (identifier === this.stuntTouchId) {
+      this.stuntTouchId = null
     }
   }
 
@@ -236,7 +254,9 @@ class InputManager {
       boost: this.buttons.boost,
       fire: this.buttons.fire,
       missileFire: this.buttonPressed.missile,
-      netDeploy: this.buttonPressed.net
+      netDeploy: this.buttonPressed.net,
+      stuntType: this.buttonPressed.stunt ? this.selectedStunt : 0,
+      stuntReqId: this.buttonPressed.stunt ? this.stuntReqId : 0
     }
   }
 

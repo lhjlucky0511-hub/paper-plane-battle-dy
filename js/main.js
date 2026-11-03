@@ -92,32 +92,39 @@ class MainApp {
     const w = this.screenInfo.width
     const h = this.screenInfo.height
     const btnW = 220
-    const btnH = 60
+    const btnH = 55
 
-    // 开始游戏按钮
-    const startX = (w - btnW) / 2
-    const startY = h * 0.5
-    if (this._pointInRect(x, y, startX, startY, btnW, btnH)) {
-      this.menuState = 'aiSelect'
-      return
-    }
+    // 主菜单按钮
+    if (this.menuState === 'main') {
+      const startX = (w - btnW) / 2
+      const baseY = h * 0.45
+      const gap = btnH + 15
 
-    // 帮助按钮
-    const helpY = startY + btnH + 20
-    if (this._pointInRect(x, y, startX, helpY, btnW, btnH)) {
-      this.menuState = 'help'
-      return
-    }
-
-    // 设置按钮
-    const setY = helpY + btnH + 20
-    if (this._pointInRect(x, y, startX, setY, btnW, btnH)) {
-      this.menuState = 'settings'
-      return
+      // 对战模式
+      if (this._pointInRect(x, y, startX, baseY, btnW, btnH)) {
+        this.menuState = 'aiSelect'
+        return
+      }
+      // 战役模式
+      if (this._pointInRect(x, y, startX, baseY + gap, btnW, btnH)) {
+        this.menuState = 'campaignChapter'
+        return
+      }
+      // 联机模式
+      if (this._pointInRect(x, y, startX, baseY + gap * 2, btnW, btnH)) {
+        this.menuState = 'lanMenu'
+        return
+      }
+      // 操作说明
+      if (this._pointInRect(x, y, startX, baseY + gap * 3, btnW, btnH)) {
+        this.menuState = 'help'
+        return
+      }
     }
 
     // AI数量选择界面
     if (this.menuState === 'aiSelect') {
+      const startX = (w - btnW) / 2
       // 选择1个AI
       const ai1Y = h * 0.4
       if (this._pointInRect(x, y, startX, ai1Y, btnW, btnH)) {
@@ -144,10 +151,82 @@ class MainApp {
       }
     }
 
+    // 战役章节选择
+    if (this.menuState === 'campaignChapter') {
+      const startX = (w - btnW) / 2
+      const chapters = this.game.campaign
+      for (let i = 0; i < 4; i++) {
+        const btnY = h * 0.3 + i * (btnH + 10)
+        if (this._pointInRect(x, y, startX, btnY, btnW, btnH)) {
+          this.selectedChapter = i + 1
+          this.menuState = 'campaignLevel'
+          return
+        }
+      }
+      // 返回
+      const backY = h * 0.85
+      if (this._pointInRect(x, y, startX, backY, btnW, btnH)) {
+        this.menuState = 'main'
+        return
+      }
+    }
+
+    // 战役关卡选择
+    if (this.menuState === 'campaignLevel') {
+      const startX = (w - btnW) / 2
+      const levels = this.game.campaign.getLevelsOfChapter(this.selectedChapter)
+      const cols = 3
+      const btnW2 = 70
+      const btnH2 = 70
+      const startX2 = (w - cols * (btnW2 + 10)) / 2
+      const startY = h * 0.25
+
+      for (let i = 0; i < levels.length; i++) {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const bx = startX2 + col * (btnW2 + 10)
+        const by = startY + row * (btnH2 + 10)
+        if (this._pointInRect(x, y, bx, by, btnW2, btnH2)) {
+          const level = levels[i]
+          if (this.game.campaign.unlockedLevels.includes(level.id)) {
+            this._startCampaign(level.id)
+          }
+          return
+        }
+      }
+      // 返回
+      const backY = h * 0.9
+      if (this._pointInRect(x, y, startX, backY, btnW, btnH)) {
+        this.menuState = 'campaignChapter'
+        return
+      }
+    }
+
+    // 联机菜单
+    if (this.menuState === 'lanMenu') {
+      const startX = (w - btnW) / 2
+      const baseY = h * 0.4
+      // 创建房间
+      if (this._pointInRect(x, y, startX, baseY, btnW, btnH)) {
+        this.menuState = 'lanCreate'
+        return
+      }
+      // 加入房间
+      if (this._pointInRect(x, y, startX, baseY + btnH + 15, btnW, btnH)) {
+        this.menuState = 'lanJoin'
+        return
+      }
+      // 返回
+      if (this._pointInRect(x, y, startX, baseY + (btnH + 15) * 2, btnW, btnH)) {
+        this.menuState = 'main'
+        return
+      }
+    }
+
     // 帮助界面
     if (this.menuState === 'help') {
-      // 返回按钮
-      const backY = h * 0.8
+      const startX = (w - btnW) / 2
+      const backY = h * 0.85
       if (this._pointInRect(x, y, startX, backY, btnW, btnH)) {
         this.menuState = 'main'
         return
@@ -156,10 +235,15 @@ class MainApp {
 
     // 游戏结束界面
     if (this.game.state === GAME_STATE.ENDED) {
+      const startX = (w - btnW) / 2
       // 再来一局
       const retryY = h * 0.6
       if (this._pointInRect(x, y, startX, retryY, btnW, btnH)) {
-        this._startGame(this.game.planes.filter(p => p.isAI).length || 3)
+        if (this.game.gameMode === 'campaign') {
+          this._startCampaign(this.game.campaignLevel.id)
+        } else {
+          this._startGame(this.game.planes.filter(p => p.isAI).length || 3)
+        }
         return
       }
       // 返回主菜单
@@ -195,6 +279,13 @@ class MainApp {
     this.menuState = 'main'
     this.gameResult = null
     this.game.start('versus', aiCount)
+    this._lastTime = Date.now()
+  }
+
+  _startCampaign(levelId) {
+    this.menuState = 'main'
+    this.gameResult = null
+    this.game.startCampaign(levelId)
     this._lastTime = Date.now()
   }
 
@@ -257,9 +348,11 @@ class MainApp {
     ctx.fillText('Paper Plane Battle', w / 2, h * 0.2 + 30)
 
     if (this.menuState === 'main') {
-      this._drawMenuButton(ctx, w, h, h * 0.5, '开始游戏', '#4A90D9')
-      this._drawMenuButton(ctx, w, h, h * 0.5 + 80, '操作说明', '#27AE60')
-      this._drawMenuButton(ctx, w, h, h * 0.5 + 160, '设置', '#7F8C8D')
+      const baseY = h * 0.45
+      this._drawMenuButton(ctx, w, h, baseY, '对战模式', '#4A90D9')
+      this._drawMenuButton(ctx, w, h, baseY + 70, '战役模式', '#E74C3C')
+      this._drawMenuButton(ctx, w, h, baseY + 140, '联机模式', '#9B59B6')
+      this._drawMenuButton(ctx, w, h, baseY + 210, '操作说明', '#27AE60')
     } else if (this.menuState === 'aiSelect') {
       // AI数量选择
       ctx.fillStyle = '#fff'
@@ -267,12 +360,137 @@ class MainApp {
       ctx.fillText('选择AI数量', w / 2, h * 0.35)
       
       this._drawMenuButton(ctx, w, h, h * 0.4, '简单 (1 AI)', '#2ECC71')
-      this._drawMenuButton(ctx, w, h, h * 0.4 + 75, '普通 (3 AI)', '#F39C12')
-      this._drawMenuButton(ctx, w, h, h * 0.4 + 150, '困难 (5 AI)', '#E74C3C')
-      this._drawMenuButton(ctx, w, h, h * 0.4 + 250, '返回', '#7F8C8D')
+      this._drawMenuButton(ctx, w, h, h * 0.4 + 70, '普通 (3 AI)', '#F39C12')
+      this._drawMenuButton(ctx, w, h, h * 0.4 + 140, '困难 (5 AI)', '#E74C3C')
+      this._drawMenuButton(ctx, w, h, h * 0.4 + 240, '返回', '#7F8C8D')
+    } else if (this.menuState === 'campaignChapter') {
+      this._renderCampaignChapters(ctx, w, h)
+    } else if (this.menuState === 'campaignLevel') {
+      this._renderCampaignLevels(ctx, w, h)
+    } else if (this.menuState === 'lanMenu') {
+      this._renderLanMenu(ctx, w, h)
+    } else if (this.menuState === 'lanCreate' || this.menuState === 'lanJoin') {
+      this._renderLanInfo(ctx, w, h)
     } else if (this.menuState === 'help') {
       this._renderHelp(ctx, w, h)
     }
+  }
+
+  _renderCampaignChapters(ctx, w, h) {
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 24px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('选择章节', w / 2, h * 0.2)
+
+    const chapters = [
+      { name: '第1章·书桌战场', desc: '7关' },
+      { name: '第2章·遗迹迷途', desc: '7关' },
+      { name: '第3章·星核决战', desc: '5关' },
+      { name: '第4章·都市峡谷', desc: '7关' }
+    ]
+
+    for (let i = 0; i < chapters.length; i++) {
+      const y = h * 0.3 + i * 65
+      this._drawMenuButton(ctx, w, h, y, `${chapters[i].name} [${chapters[i].desc}]`, i === 0 ? '#4A90D9' : i === 1 ? '#E74C3C' : i === 2 ? '#9B59B6' : '#F39C12')
+    }
+    this._drawMenuButton(ctx, w, h, h * 0.85, '返回', '#7F8C8D')
+  }
+
+  _renderCampaignLevels(ctx, w, h) {
+    const chapter = this.game.campaign.getChapter(this.selectedChapter)
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 22px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(chapter ? chapter.name : '关卡选择', w / 2, h * 0.15)
+
+    const levels = this.game.campaign.getLevelsOfChapter(this.selectedChapter)
+    const cols = 3
+    const btnW = 70
+    const btnH = 70
+    const startX = (w - cols * (btnW + 10)) / 2
+    const startY = h * 0.25
+
+    for (let i = 0; i < levels.length; i++) {
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      const bx = startX + col * (btnW + 10)
+      const by = startY + row * (btnH + 10)
+      const level = levels[i]
+      const unlocked = this.game.campaign.unlockedLevels.includes(level.id)
+      const completed = this.game.campaign.completedLevels.includes(level.id)
+
+      // 按钮背景
+      ctx.fillStyle = !unlocked ? '#444' : completed ? '#2ECC71' : level.isBoss ? '#E74C3C' : '#4A90D9'
+      ctx.globalAlpha = unlocked ? 1 : 0.5
+      ctx.beginPath()
+      ctx.roundRect(bx, by, btnW, btnH, 8)
+      ctx.fill()
+      ctx.globalAlpha = 1
+
+      // 关卡编号
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 24px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(level.id, bx + btnW / 2, by + btnH / 2 + 5)
+
+      // Boss标记
+      if (level.isBoss) {
+        ctx.fillStyle = '#FFD700'
+        ctx.font = '10px sans-serif'
+        ctx.fillText('BOSS', bx + btnW / 2, by + 12)
+      }
+
+      // 已完成标记
+      if (completed) {
+        ctx.fillStyle = '#fff'
+        ctx.font = '10px sans-serif'
+        ctx.fillText('✓', bx + btnW - 12, by + 15)
+      }
+
+      // 锁定标记
+      if (!unlocked) {
+        ctx.fillStyle = '#fff'
+        ctx.font = '16px sans-serif'
+        ctx.fillText('🔒', bx + btnW / 2, by + btnH / 2 + 5)
+      }
+    }
+
+    this._drawMenuButton(ctx, w, h, h * 0.9, '返回', '#7F8C8D')
+  }
+
+  _renderLanMenu(ctx, w, h) {
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 24px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('联机模式', w / 2, h * 0.3)
+
+    ctx.fillStyle = '#888'
+    ctx.font = '14px sans-serif'
+    ctx.fillText('基于 WebSocket 的实时对战', w / 2, h * 0.35)
+
+    const baseY = h * 0.4
+    this._drawMenuButton(ctx, w, h, baseY, '创建房间', '#4A90D9')
+    this._drawMenuButton(ctx, w, h, baseY + 70, '加入房间', '#27AE60')
+    this._drawMenuButton(ctx, w, h, baseY + 140, '返回', '#7F8C8D')
+  }
+
+  _renderLanInfo(ctx, w, h) {
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 22px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(this.menuState === 'lanCreate' ? '创建房间' : '加入房间', w / 2, h * 0.3)
+
+    ctx.fillStyle = '#aaa'
+    ctx.font = '14px sans-serif'
+    ctx.fillText('需要配置 WebSocket 中转服务器', w / 2, h * 0.4)
+    ctx.fillText('服务器地址请在 LanSystem.js 中配置', w / 2, h * 0.45)
+
+    ctx.fillStyle = '#888'
+    ctx.font = '12px sans-serif'
+    ctx.fillText('请确保主机和客户端在同一局域网', w / 2, h * 0.55)
+    ctx.fillText('或通过公网 WebSocket 服务器连接', w / 2, h * 0.6)
+
+    this._drawMenuButton(ctx, w, h, h * 0.8, '返回', '#7F8C8D')
   }
 
   _drawMenuButton(ctx, w, h, y, text, color) {
@@ -359,13 +577,22 @@ class MainApp {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, w, h)
 
-    const won = this.gameResult && this.gameResult.survived && 
-                this.game.aiControllers.every(c => !c.plane.isAlive || c.plane.lives < 0)
+    let won = false
+    let title = '游戏结束'
+    
+    if (this.game.gameMode === 'campaign') {
+      won = this.gameResult && this.gameResult.campaignWin
+      title = won ? '任务完成！' : '任务失败'
+    } else {
+      won = this.gameResult && this.gameResult.survived && 
+            this.game.aiControllers.every(c => !c.plane.isAlive || c.plane.lives < 0)
+      title = won ? '胜利！' : '游戏结束'
+    }
 
     ctx.fillStyle = won ? '#2ECC71' : '#E74C3C'
     ctx.font = 'bold 36px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText(won ? '胜利！' : '游戏结束', w / 2, h * 0.25)
+    ctx.fillText(title, w / 2, h * 0.25)
 
     // 战绩
     if (this.gameResult) {
@@ -374,6 +601,12 @@ class MainApp {
       const statsY = h * 0.35
       ctx.fillText(`击杀数: ${this.gameResult.kills}`, w / 2, statsY)
       ctx.fillText(`生存时间: ${Math.floor(this.gameResult.time)}秒`, w / 2, statsY + 30)
+      
+      if (won && this.game.gameMode === 'campaign') {
+        const level = this.game.campaignLevel
+        ctx.fillStyle = '#F1C40F'
+        ctx.fillText(`获得 ${level.rewardCoins} 金币`, w / 2, statsY + 60)
+      }
     }
 
     // 按钮

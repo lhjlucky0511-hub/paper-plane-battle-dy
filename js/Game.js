@@ -4,6 +4,9 @@ const Plane = require('./Plane')
 const AIController = require('./AIController')
 const { Spit, Missile, Net } = require('./Projectiles')
 const InputManager = require('./InputManager')
+const { CampaignManager, OBJECTIVE_TYPE } = require('./CampaignSystem')
+const { LootField, LOOT_TYPES, LOOT_COLORS, LOOT_NAMES } = require('./LootSystem')
+const { STUNT_TYPES, STUNT_DEFS } = require('./StuntSystem')
 const { ParticleSystem, distance, randomRange } = require('./utils')
 
 // 游戏状态
@@ -58,6 +61,24 @@ class Game {
 
     // UI状态
     this.toasts = []  // 战斗提示
+
+    // 战役系统
+    this.campaign = new CampaignManager()
+    this.campaignLevel = null
+    this.campaignObjective = null
+
+    // 道具系统
+    this.lootField = new LootField()
+
+    // 增援
+    this.reinforcementsSpawned = false
+
+    // 玩家金币
+    this.coins = 0
+    this.totalCoins = 0
+
+    // 战斗场地半径
+    this.arenaRadius = CONSTS.ARENA.RADIUS
   }
 
   init(width, height) {
@@ -102,6 +123,18 @@ class Game {
         y: h - buttonSize * 3 - 50,
         w: buttonSize,
         h: buttonSize
+      },
+      stunt: {
+        x: 30,
+        y: h - buttonSize * 2 - 30,
+        w: buttonSize,
+        h: buttonSize
+      },
+      stuntSelect: {
+        x: 30 + buttonSize + 10,
+        y: h - buttonSize * 2 - 30,
+        w: buttonSize * 0.7,
+        h: buttonSize
       }
     }
   }
@@ -112,6 +145,7 @@ class Game {
     
     this.state = GAME_STATE.PLAYING
     this.elapsed = 0
+    this.reinforcementsSpawned = false
     
     // 清空实体
     this.planes = []
@@ -121,12 +155,105 @@ class Game {
     this.nets = []
     this.toasts = []
     
+    // 初始化道具场
+    this._initLootField()
+    
     // 创建玩家
     this._spawnPlayer()
     
     // 创建AI
     for (let i = 0; i < this.aiCount; i++) {
       this._spawnAI(i)
+    }
+  }
+
+  // 战役模式开始
+  startCampaign(levelId) {
+    this.campaignLevel = this.campaign.startLevel(levelId)
+    if (!this.campaignLevel) return
+    
+    this.gameMode = 'campaign'
+    this.aiCount = 0  // 由关卡配置决定
+    this.state = GAME_STATE.PLAYING
+    this.elapsed = 0
+    this.reinforcementsSpawned = false
+    
+    this.planes = []
+    this.aiControllers = []
+    this.spits = []
+    this.missiles = []
+    this.nets = []
+    this.toasts = []
+    
+    this._initLootField()
+    this._spawnPlayer()
+    
+    // 根据关卡配置生成敌人
+    for (let i = 0; i < this.campaignLevel.enemies.length; i++) {
+      this._spawnCampaignEnemy(i, this.campaignLevel.enemies[i])
+    }
+    
+    this._addToast(`关卡 ${this.campaignLevel.id}: ${this.campaignLevel.name}`)
+  }
+
+  _initLootField() {
+    // 生成道具点位（围绕战场均匀分布）
+    const spawns = []
+    const count = 8
+    const radius = this.arenaRadius * 0.6
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + randomRange(-0.2, 0.2)
+      spawns.push({
+        x: Math.cos(angle) * radius * randomRange(0.5, 1),
+        y: Math.sin(angle) * radius * randomRange(0.5, 1)
+      })
+    }
+    this.lootField.build(spawns)
+  }
+
+  _spawnCampaignEnemy(index, spec) {
+    const colors = [
+      { main: '#E74C3C', accent: '#FFB7B7' },
+      { main: '#9B59B6', accent: '#D7BDE2' },
+      { main: '#E67E22', accent: '#FAD7A0' }
+    ]
+    
+    const angle = (index / Math.max(1, this.campaignLevel.enemies.length)) * Math.PI * 2
+    const dist = randomRange(200, this.arenaRadius - 100)
+    const color = colors[index % colors.length]
+    
+    const baseHealth = 80 * (spec.healthMul || 1)
+    const ai = new Plane({
+      id: index + 1,
+      isPlayer: false,
+      isAI: true,
+      displayName: spec.name,
+      color: color.main,
+      accentColor: color.accent,
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist,
+      yaw: randomRange(0, Math.PI * 2),
+      missileAmmo: spec.skillLevel >= 4 ? 2 : 0,
+      netAmmo: spec.skillLevel >= 6 ? 1 : 0,
+      lives: 0  // 战役模式敌人不重生
+    })
+    
+    ai.maxHealth = baseHealth
+    ai.health = baseHealth
+    ai.arenaRadius = this.arenaRadius
+    ai.attackMul = spec.attackMul || 1
+    
+    const controller = new AIController(ai)
+    controller.skillLevel = spec.skillLevel
+    this.aiControllers.push(controller)
+    this.planes.push(ai)
+  }
+
+  // 生成增援
+  spawnReinforcements(specs) {
+    this._addToast('敌方增援到达！')
+    for (let i = 0; i < specs.length; i++) {
+      this._spawnCampaignEnemy(this.aiControllers.length, specs[i])
     }
   }
 
@@ -264,6 +391,21 @@ class Game {
     
     // 更新粒子
     this.particles.update(dt)
+    
+    // 更新道具场
+    this.lootField.update(dt, this.planes, this.elapsed)
+    
+    // 战役目标更新
+    if (this.gameMode === 'campaign' && this.campaignLevel) {
+      const result = this.campaign.tick(dt, this)
+      if (result) {
+        if (result.completed) {
+          this._onCampaignComplete()
+        } else if (result.failed) {
+          this._onCampaignFail()
+        }
+      }
+    }
     
     // 处理死亡/重生
     this._handleDeathsAndRespawns()
@@ -494,7 +636,34 @@ class Game {
     }
   }
 
+  _onCampaignComplete() {
+    const level = this.campaign.completeLevel()
+    if (level) {
+      this.coins += level.rewardCoins
+      this.totalCoins += level.rewardCoins
+      this.player.missileAmmo = Math.min(5, this.player.missileAmmo + level.rewardMissiles)
+      this.player.netAmmo = Math.min(3, this.player.netAmmo + level.rewardNets)
+      this._addToast(`关卡完成！获得 ${level.rewardCoins} 金币`)
+    }
+    this.state = GAME_STATE.ENDED
+    this.gameEndTime = this.elapsed
+    if (this.onGameEnd) {
+      this.onGameEnd({ ...this._getPlayerStats(), campaignWin: true, levelId: level ? level.id : 0 })
+    }
+  }
+
+  _onCampaignFail() {
+    this._addToast('任务失败！')
+    this.state = GAME_STATE.ENDED
+    this.gameEndTime = this.elapsed
+    if (this.onGameEnd) {
+      this.onGameEnd({ ...this._getPlayerStats(), campaignWin: false })
+    }
+  }
+
   _checkGameEnd() {
+    if (this.gameMode === 'campaign') return  // 战役模式由 objective 控制结束
+
     if (this.gameMode === CONSTS.GAME_MODE.PRACTICE) {
       // 练习模式：玩家无命时结束
       if (this.player && this.player.lives < 0) {
@@ -560,6 +729,15 @@ class Game {
     // 渲染战场
     this._renderArena(ctx)
 
+    // 渲染道具场
+    this._renderLootField(ctx)
+
+    // 渲染战役能量环
+    if (this.gameMode === 'campaign' && this.campaign.objective && 
+        this.campaign.objective.rings) {
+      this._renderCampaignRings(ctx)
+    }
+
     // 渲染投射物
     for (const spit of this.spits) spit.render(ctx, spit.x, spit.y)
     for (const missile of this.missiles) missile.render(ctx, missile.x, missile.y)
@@ -624,6 +802,83 @@ class Game {
     ctx.stroke()
   }
 
+  _renderLootField(ctx) {
+    const field = this.lootField
+    if (!field.built) return
+
+    for (const point of field.points) {
+      if (!point.available) continue
+
+      const bob = Math.sin(this.elapsed * 2 + point.bobOffset) * 4
+      ctx.save()
+      ctx.translate(point.x, point.y + bob)
+      ctx.rotate(point.rotation)
+
+      const color = LOOT_COLORS[point.type] || '#FFD700'
+      ctx.shadowColor = color
+      ctx.shadowBlur = 12
+
+      ctx.fillStyle = color
+      ctx.fillRect(-9, -9, 18, 18)
+      ctx.shadowBlur = 0
+
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 1
+      ctx.strokeRect(-9, -9, 18, 18)
+
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 10px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(this._lootIcon(point.type), 0, 0)
+
+      ctx.restore()
+    }
+  }
+
+  _lootIcon(type) {
+    const icons = {
+      [LOOT_TYPES.HEAL]: '+',
+      [LOOT_TYPES.AMMO]: '弹',
+      [LOOT_TYPES.BOOST]: '速',
+      [LOOT_TYPES.SHIELD]: '盾',
+      [LOOT_TYPES.STEALTH]: '隐',
+      [LOOT_TYPES.SLINGSHOT]: '弹',
+      [LOOT_TYPES.LUCKY_FOLD]: '幸',
+      [LOOT_TYPES.MINI_PLANE]: '机',
+      [LOOT_TYPES.ORIGAMI_DART]: '镖',
+      [LOOT_TYPES.SOAP_BUBBLE]: '泡',
+      [LOOT_TYPES.PAPER_BEE]: '蜂'
+    }
+    return icons[type] || '?'
+  }
+
+  _renderCampaignRings(ctx) {
+    const rings = this.campaign.objective.rings
+    for (const ring of rings) {
+      if (ring.passed) {
+        ctx.strokeStyle = '#2ECC71'
+        ctx.globalAlpha = 0.3
+      } else {
+        ctx.strokeStyle = '#F1C40F'
+        ctx.globalAlpha = 0.8
+      }
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.arc(ring.x, ring.y, ring.radius, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.globalAlpha = 1
+
+      // 环中心标记
+      if (!ring.passed) {
+        ctx.fillStyle = 'rgba(241, 196, 15, 0.3)'
+        ctx.beginPath()
+        ctx.arc(ring.x, ring.y, ring.radius * 0.6, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+  }
+
   _renderHUD(ctx) {
     const w = this.screenWidth
     const h = this.screenHeight
@@ -664,6 +919,18 @@ class Game {
 
     // 击杀数
     ctx.fillText(`击杀: ${this.player.kills}`, barX, barY + 80)
+
+    // 战役目标
+    if (this.gameMode === 'campaign' && this.campaignLevel) {
+      const objText = this.campaign.getObjectiveText()
+      ctx.fillStyle = '#F1C40F'
+      ctx.font = 'bold 14px sans-serif'
+      ctx.fillText(`目标: ${objText}`, barX, barY + 105)
+    }
+
+    // 金币
+    ctx.fillStyle = '#F1C40F'
+    ctx.fillText(`金币: ${this.coins}`, barX, barY + 125)
 
     // 右上：雷达
     this._renderRadar(ctx, w - 120, 60)
@@ -841,6 +1108,30 @@ class Game {
     
     // 加速按钮
     this._drawButton(ctx, layout.boost, '加速', '#F39C12', this.input.buttons.boost)
+
+    // 特技按钮
+    const stuntType = this.input.selectedStunt
+    const stuntDef = STUNT_DEFS[stuntType]
+    const stuntCd = this.player.stunt.getStuntCooldown(stuntType)
+    const stuntReady = stuntCd <= 0 && this.player.wind >= stuntDef.cost
+    this._drawButton(ctx, layout.stunt, stuntDef.name, stuntReady ? '#9B59B6' : '#555', stuntReady)
+    
+    // 特技冷却指示
+    if (stuntCd > 0) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+      ctx.fillRect(layout.stunt.x, layout.stunt.y, layout.stunt.w, layout.stunt.h * (stuntCd / stuntDef.cooldown))
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 12px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(stuntCd.toFixed(1), layout.stunt.x + layout.stunt.w / 2, layout.stunt.y + layout.stunt.h / 2)
+    }
+
+    // 特技选择按钮
+    this._drawButton(ctx, layout.stuntSelect, '切换', '#34495E', false)
+    ctx.fillStyle = '#fff'
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(stuntDef.name, layout.stuntSelect.x + layout.stuntSelect.w / 2, layout.stuntSelect.y + layout.stuntSelect.h + 15)
   }
 
   _drawButton(ctx, rect, label, color, active) {

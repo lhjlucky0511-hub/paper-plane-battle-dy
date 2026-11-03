@@ -2,6 +2,7 @@
 // 简化为2D俯视视角的飞机
 
 const CONSTS = require('./constants')
+const { StuntSystem, STUNT_TYPES } = require('./StuntSystem')
 const { clamp, normalizeAngle, angleDiff } = require('./utils')
 
 class Plane {
@@ -59,6 +60,35 @@ class Plane {
     
     // 动画参数
     this.wobble = 0
+
+    // 特技系统
+    this.stunt = new StuntSystem(this)
+
+    // 道具效果
+    this.stealthTimer = 0           // 隐身剩余秒数
+    this.isStealthed = false
+    this.slingshotArmed = false     // 弹射装填
+    this.luckyFoldArmed = false     // 幸运折角
+    this.luckyFoldUsed = false
+    this.speedBoostMul = 1          // 临时速度倍率
+    this.speedBoostTimer = 0
+    this.aimJitterTimer = 0
+    this.slipTimer = 0
+    this.invertTimer = 0
+
+    // 拾取道具弹药
+    this.reverseAmmo = 0
+    this.miniPlaneAmmo = 0
+    this.origamiDartAmmo = 0
+    this.soapBubbleAmmo = 0
+    this.paperBeeAmmo = 0
+
+    // LAN 相关
+    this.lanSeatId = options.lanSeatId || -1
+    this.isLocallyDriven = options.isLocallyDriven !== false
+
+    // 体型倍率（Boss）
+    this.sizeRadius = options.sizeRadius || 1
   }
 
   // 获取速度向量
@@ -93,15 +123,41 @@ class Plane {
       this.hitFlashTimer -= dt
     }
 
+    // 隐身计时
+    if (this.stealthTimer > 0) {
+      this.stealthTimer -= dt
+      this.isStealthed = this.stealthTimer > 0
+    } else {
+      this.isStealthed = false
+    }
+
+    // 临时加速计时
+    if (this.speedBoostTimer > 0) {
+      this.speedBoostTimer -= dt
+      if (this.speedBoostTimer <= 0) {
+        this.speedBoostMul = 1
+      }
+    }
+
     // AI输入
     let actualInput = input
     if (this.isAI && game) {
       actualInput = game.getAIInput(this, dt)
     }
 
-    // 处理移动输入
-    this._handleMovement(actualInput, dt)
-    
+    // 处理特技请求
+    if (actualInput.stuntReqId > 0 && actualInput.stuntType > 0) {
+      this.stunt.tryStart(actualInput.stuntType, actualInput.stuntReqId)
+    }
+
+    // 特技系统更新（特技激活时接管姿态）
+    if (this.stunt.isStunting) {
+      this.stunt.update(dt)
+    } else {
+      // 处理移动输入
+      this._handleMovement(actualInput, dt)
+    }
+
     // 更新位置
     this.x += this.vx * dt * 10
     this.y += this.vy * dt * 10
@@ -112,8 +168,10 @@ class Plane {
     // 更新武器冷却
     this._updateCooldowns(dt)
 
-    // 风/能量系统
-    this._updateWind(actualInput, dt)
+    // 风/能量系统（特技时不消费输入加速）
+    if (!this.stunt.isStunting) {
+      this._updateWind(actualInput, dt)
+    }
 
     // 动画参数
     this.wobble += dt * 8
@@ -259,6 +317,9 @@ class Plane {
     this.isAlive = false
     this.isCrashing = true
     this.deaths++
+    this.stunt.forceEnd()
+    this.isStealthed = false
+    this.stealthTimer = 0
   }
 
   respawn(x, y, yaw) {
@@ -298,6 +359,16 @@ class Plane {
     // 无敌闪烁
     if (this.invulnTimer > 0 && Math.floor(this.invulnTimer * 10) % 2 === 0) {
       ctx.globalAlpha = 0.4
+    }
+
+    // 隐身效果
+    if (this.isStealthed) {
+      ctx.globalAlpha = 0.25
+    }
+
+    // 桶滚旋转效果（视觉上滚转）
+    if (this.stunt.isBarrelRolling) {
+      ctx.rotate(this.stunt.stuntTimer * Math.PI * 2.4)
     }
 
     // 受击闪烁
