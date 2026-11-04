@@ -138,6 +138,51 @@ class MainApp {
     const btnW = 220
     const btnH = 55
 
+    // 结算界面（优先处理，避免点击被下方隐藏的菜单按钮拦截）
+    if (this.game.state === GAME_STATE.ENDED) {
+      const startX = (w - btnW) / 2
+      // 再来一局
+      const retryY = h * 0.6
+      if (this._pointInRect(x, y, startX, retryY, btnW, btnH)) {
+        if (this.game.gameMode === 'campaign' && this.game.campaignLevel) {
+          this._startCampaign(this.game.campaignLevel.id)
+        } else {
+          this._startGame(this.game.planes.filter(p => p.isAI).length || 3)
+        }
+        return
+      }
+      // 返回主菜单
+      const menuY = retryY + btnH + 20
+      if (this._pointInRect(x, y, startX, menuY, btnW, btnH)) {
+        this.menuState = 'main'
+        this.game.backToMenu()
+        return
+      }
+      return
+    }
+
+    // 暂停界面
+    if (this.game.state === GAME_STATE.PAUSED) {
+      const pauseBtnX = (w - btnW) / 2
+      // 继续游戏
+      const resumeY = h * 0.5
+      if (this._pointInRect(x, y, pauseBtnX, resumeY, btnW, btnH)) {
+        this.game.resume()
+        return
+      }
+      // 返回主菜单
+      const quitY = resumeY + btnH + 20
+      if (this._pointInRect(x, y, pauseBtnX, quitY, btnW, btnH)) {
+        this.menuState = 'main'
+        this.game.backToMenu()
+        return
+      }
+      return
+    }
+
+    // 其余状态（游戏进行中）不处理菜单点击
+    if (this.game.state !== GAME_STATE.MENU) return
+
     // 主菜单按钮
     if (this.menuState === 'main') {
       const startX = (w - btnW) / 2
@@ -273,44 +318,6 @@ class MainApp {
       const backY = h * 0.85
       if (this._pointInRect(x, y, startX, backY, btnW, btnH)) {
         this.menuState = 'main'
-        return
-      }
-    }
-
-    // 游戏结束界面
-    if (this.game.state === GAME_STATE.ENDED) {
-      const startX = (w - btnW) / 2
-      // 再来一局
-      const retryY = h * 0.6
-      if (this._pointInRect(x, y, startX, retryY, btnW, btnH)) {
-        if (this.game.gameMode === 'campaign') {
-          this._startCampaign(this.game.campaignLevel.id)
-        } else {
-          this._startGame(this.game.planes.filter(p => p.isAI).length || 3)
-        }
-        return
-      }
-      // 返回主菜单
-      const menuY = retryY + btnH + 20
-      if (this._pointInRect(x, y, startX, menuY, btnW, btnH)) {
-        this.game.backToMenu()
-        return
-      }
-    }
-
-    // 暂停界面
-    if (this.game.state === GAME_STATE.PAUSED) {
-      const pauseBtnX = (w - btnW) / 2
-      // 继续游戏
-      const resumeY = h * 0.5
-      if (this._pointInRect(x, y, pauseBtnX, resumeY, btnW, btnH)) {
-        this.game.resume()
-        return
-      }
-      // 返回主菜单
-      const quitY = resumeY + btnH + 20
-      if (this._pointInRect(x, y, pauseBtnX, quitY, btnW, btnH)) {
-        this.game.backToMenu()
         return
       }
     }
