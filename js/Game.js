@@ -30,12 +30,23 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
-// 教室地图 3D 透视相机（世界坐标 -> 屏幕坐标）
+  // 教室地图 3D 透视相机（世界坐标 -> 屏幕坐标）
 const CAM3D = {
-  HEIGHT: 600,        // 相机离地高度
-  DIST: 600,          // 相机位于玩家后方的距离
-  TILT: Math.PI / 4,  // 俯视角度
-  FOCAL: 360          // 焦距（像素）
+  // 第三视角（俯视）
+  THIRD: {
+    HEIGHT: 600,        // 相机离地高度
+    DIST: 600,          // 相机位于玩家后方的距离
+    TILT: Math.PI / 4,  // 俯视角度（45°）
+    FOCAL: 360,         // 焦距（像素）
+    YAW: 0              // 朝向（= 0 表示朝 +Y 方向）
+  },
+  // 第一视角（飞行员视角）
+  FIRST: {
+    HEIGHT: 52,         // 飞行员眼睛高度（略高于飞机 z=46）
+    DIST: 0,            // 相机就在飞机位置
+    TILT: 0.30,         // 俯视约 17°，前方地面在屏幕下半部
+    FOCAL: 360          // 焦距
+  }
 }
 
 // 游戏状态
@@ -110,8 +121,9 @@ class Game {
     // 战斗场地半径
     this.arenaRadius = CONSTS.ARENA.RADIUS
 
-    // 视角缩放（右上角「视角」按钮切换）
-    this.zoom = 1
+    // 视角：'third'（俯视）或 'first'（飞行员第一视角）
+    this.cameraMode = 'third'
+    this.zoom = 1  // 2D 地图的缩放，保留兼容
 
     // 屏幕 HUD 布局（横屏）
     this.hudLayout = null
@@ -868,30 +880,63 @@ class Game {
   }
 
   _setup3D() {
-    const zoomed = this.zoom > 1
     const px = this.player && this.player.isAlive ? this.player.x : 0
     const py = this.player && this.player.isAlive ? this.player.y : 0
-    // 放大视角时相机轻微跟随玩家，避免玩家飞出画面
-    const follow = zoomed ? 0.5 : 0
-    this._cam3d = {
-      cx: this.screenWidth / 2,
-      cy: this.screenHeight / 2,
-      camX: px * follow,
-      camY: py * follow,
-      height: CAM3D.HEIGHT,
-      dist: CAM3D.DIST,
-      sin: Math.sin(CAM3D.TILT),
-      cos: Math.cos(CAM3D.TILT),
-      focal: CAM3D.FOCAL * (zoomed ? 1.45 : 1)
+    const pyaw = this.player ? this.player.yaw : 0
+
+    let cam
+    if (this.cameraMode === 'first') {
+      // 第一视角：相机就在飞机上，朝向跟随飞机 yaw
+      cam = CAM3D.FIRST
+      this._cam3d = {
+        cx: this.screenWidth / 2,
+        cy: this.screenHeight / 2,
+        camX: px,
+        camY: py,
+        height: cam.HEIGHT,
+        dist: cam.DIST,
+        sin: Math.sin(cam.TILT),
+        cos: Math.cos(cam.TILT),
+        focal: cam.FOCAL,
+        yaw: pyaw  // 动态跟随飞机航向
+      }
+    } else {
+      // 第三视角：高俯，相机轻微跟随玩家
+      const follow = 0.5
+      const zoomed = this.zoom > 1
+      cam = CAM3D.THIRD
+      this._cam3d = {
+        cx: this.screenWidth / 2,
+        cy: this.screenHeight / 2,
+        camX: px * follow,
+        camY: py * follow,
+        height: cam.HEIGHT,
+        dist: cam.DIST,
+        sin: Math.sin(cam.TILT),
+        cos: Math.cos(cam.TILT),
+        focal: cam.FOCAL * (zoomed ? 1.45 : 1),
+        yaw: 0
+      }
     }
   }
 
   // 世界坐标 (x, y, z) 投影到屏幕，返回 { x, y, s }（s 为该处缩放）
   _project(x, y, z) {
     const c = this._cam3d
-    const dx = x - c.camX
-    const dy = y - c.camY + c.dist
+    // 平移到相机原点
+    let dx = x - c.camX
+    let dy = y - c.camY
+    // yaw 旋转（绕 Z 轴，让 +Y 变成相机前方）
+    if (c.yaw) {
+      const cyw = Math.cos(-c.yaw), syw = Math.sin(-c.yaw)
+      const rx = dx * cyw - dy * syw
+      const ry = dx * syw + dy * cyw
+      dx = rx; dy = ry
+    }
+    // 相机位于 camY - dist，看向 +Y 方向
+    dy += c.dist
     const dz = z - c.height
+    // 俯仰旋转（绕 X 轴）
     const fwd = dy * c.cos - dz * c.sin
     const up = dy * c.sin + dz * c.cos
     const s = c.focal / Math.max(1, fwd)
@@ -932,6 +977,9 @@ class Game {
     // 飞机（地面投影 + 空中 billboard）
     for (const plane of this.planes) {
       if (!plane.isAlive && !plane.isCrashing) continue
+
+      // 第一视角下跳过玩家自己（相机就在玩家身上）
+      if (this.cameraMode === 'first' && plane === this.player) continue
 
       const shadow = this._project(plane.x, plane.y, 0)
       ctx.fillStyle = 'rgba(0, 0, 0, 0.26)'
@@ -1167,7 +1215,10 @@ class Game {
 
     // 左上：暂停按钮 / 右上：视角按钮
     this._drawChip(ctx, hud.pause, '暂停')
-    this._drawChip(ctx, hud.zoom, this.zoom > 1 ? '视角 ×2' : '视角')
+    const viewLabel = this._is3D()
+      ? (this.cameraMode === 'first' ? '第一视角' : '视角')
+      : (this.zoom > 1 ? '视角 ×2' : '视角')
+    this._drawChip(ctx, hud.zoom, viewLabel)
 
     // 顶部双色条：耐久（青）/ 能量（蓝）
     const bx = hud.barX
@@ -1624,9 +1675,14 @@ class Game {
     ctx.restore()
   }
 
-  // 切换视角缩放
+  // 切换视角：第三视角（俯视）↔ 第一视角（飞行员）
   toggleZoom() {
-    this.zoom = this.zoom > 1 ? 1 : 2
+    if (this._is3D()) {
+      this.cameraMode = this.cameraMode === 'third' ? 'first' : 'third'
+    } else {
+      // 2D 地图保留原 zoom 切换
+      this.zoom = this.zoom > 1 ? 1 : 2
+    }
   }
 
   pause() {
