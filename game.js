@@ -5,15 +5,18 @@ if (typeof tt !== 'undefined') {
   globalThis.__rawCanvas = tt.createCanvas();
   globalThis.__rawCtx = globalThis.__rawCanvas.getContext('2d');
 
-  // 立即预渲染背景，消除 Canvas 默认白底闪烁
+  // 立即预渲染，用硬编码尺寸（引擎默认启动封面会显示"飞个纸飞机"白底，
+  // 我们需要尽可能早地用自定义画面覆盖它）
   (function preSplash() {
     const c = globalThis.__rawCanvas;
     const ctx = globalThis.__rawCtx;
-    const w = c.width || 890;
-    const h = c.height || 400;
+    // 用硬编码兜底，避免 canvas.width 可能尚未初始化时画不出来
+    let w = c.width;
+    let h = c.height;
+    if (!w || !h) { w = 890; h = 400; c.width = w; c.height = h; }
     const cx = w / 2, cy = h / 2;
 
-    // 深蓝夜空渐变（与 _renderLoading 背景一致）
+    // 深蓝夜空渐变
     const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7);
     bg.addColorStop(0, '#2a3f5f');
     bg.addColorStop(0.6, '#1a2538');
@@ -21,7 +24,7 @@ if (typeof tt !== 'undefined') {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    // 固定星点（和 _renderLoading 里的位置一致）
+    // 固定星点
     for (let i = 0; i < 50; i++) {
       ctx.fillStyle = `rgba(255,255,255,${0.4})`;
       ctx.beginPath();
@@ -29,7 +32,7 @@ if (typeof tt !== 'undefined') {
       ctx.fill();
     }
 
-    // 标题（静态预画）
+    // 标题（静态）
     ctx.fillStyle = '#fff';
     ctx.font = `bold ${Math.round(h * 0.09)}px sans-serif`;
     ctx.textAlign = 'center';
