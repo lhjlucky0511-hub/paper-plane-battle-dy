@@ -1411,17 +1411,17 @@ class Game {
     const netReady = player.canFireNet()
     this._drawCircleButton(ctx, layout.net, null, netReady ? '#3E8E4A' : '#555', netReady, player.netAmmo, 'grid')
 
-    // 导弹：红色小圆（箭头图标）+ 数量角标
+    // 导弹：红色小圆（导弹图标）+ 数量角标
     const missileReady = player.canFireMissile()
-    this._drawCircleButton(ctx, layout.missile, null, missileReady ? '#C0392B' : '#555', missileReady, player.missileAmmo, 'arrow')
+    this._drawCircleButton(ctx, layout.missile, null, missileReady ? '#C0392B' : '#555', missileReady, player.missileAmmo, 'missile')
 
-    // 特技：红色小圆（笔尖图标）+ 冷却角标
+    // 特技：红色小圆（双箭头图标）+ 冷却角标
     const stuntType = this.input.selectedStunt
     const stuntDef = STUNT_DEFS[stuntType]
     const stuntCd = player.stunt.getStuntCooldown(stuntType)
     const stuntReady = stuntCd <= 0 && player.wind >= stuntDef.cost
     this._drawCircleButton(ctx, layout.stunt, null, stuntReady ? '#C0392B' : '#555', stuntReady,
-                           stuntCd > 0 ? Math.ceil(stuntCd) : null, 'pencil')
+                           stuntCd > 0 ? Math.ceil(stuntCd) : null, 'arrow')
 
     // 右上竖排特技列表
     this._renderStuntList(ctx)
@@ -1551,7 +1551,7 @@ class Game {
     ctx.restore()
   }
 
-  // 小按钮图标：网格（网兜）/ 双箭头（导弹）/ 笔尖（特技）
+  // 小按钮图标：网格（网兜）/ 导弹（导弹）/ 双箭头（特技）
   _drawButtonIcon(ctx, type, cx, cy, r) {
     const s = r * 0.5
     ctx.save()
@@ -1597,6 +1597,42 @@ class Game {
       ctx.lineTo(cx - s * 0.45, cy + s * 0.1)
       ctx.closePath()
       ctx.fillStyle = '#fff'
+      ctx.fill()
+    } else if (type === 'missile') {
+      // 向右上飞行的导弹：圆头 + 机身 + 尾翼
+      const ang = -Math.PI / 4  // 向右上 45°
+      const nx = Math.cos(ang), ny = Math.sin(ang)
+      const px = -ny, py = nx   // 法向量
+      const headX = cx + nx * s * 0.9, headY = cy + ny * s * 0.9
+      const tailX = cx - nx * s * 0.9, tailY = cy - ny * s * 0.9
+      // 机身（椭圆线）
+      ctx.lineWidth = 2.2
+      ctx.strokeStyle = '#fff'
+      ctx.beginPath()
+      ctx.moveTo(headX - px * s * 0.55, headY - py * s * 0.55)
+      ctx.lineTo(tailX - px * s * 0.35, tailY - py * s * 0.35)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(headX + px * s * 0.55, headY + py * s * 0.55)
+      ctx.lineTo(tailX + px * s * 0.35, tailY + py * s * 0.35)
+      ctx.stroke()
+      // 机头圆
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(headX, headY, s * 0.32, 0, Math.PI * 2)
+      ctx.fill()
+      // 尾翼
+      ctx.beginPath()
+      ctx.moveTo(tailX - px * s * 0.35, tailY - py * s * 0.35)
+      ctx.lineTo(tailX - nx * s * 0.55, tailY - ny * s * 0.55)
+      ctx.lineTo(tailX, tailY)
+      ctx.closePath()
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(tailX + px * s * 0.35, tailY + py * s * 0.35)
+      ctx.lineTo(tailX - nx * s * 0.55, tailY - ny * s * 0.55)
+      ctx.lineTo(tailX, tailY)
+      ctx.closePath()
       ctx.fill()
     }
     ctx.restore()
