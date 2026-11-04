@@ -87,6 +87,11 @@ class MainApp {
     this._loading = true
     this._loadingStart = Date.now()
     this._lastTime = this._loadingStart
+    this._paperPlanePhase = 0
+
+    // 立即画第一帧 loading（消除 game.js 预画 → main.js 首帧之间可能的间隙）
+    this._renderLoading(this.ctx, this.screenInfo.width, this.screenInfo.height)
+
     this._loadingLoop()
   }
 
