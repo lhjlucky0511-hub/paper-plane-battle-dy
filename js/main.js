@@ -49,6 +49,13 @@ class MainApp {
     this.menuState = 'main'  // main, modeSelect, aiSelect, help
     this.gameResult = null
     this._lastMenuTouchTime = 0
+
+    // 加载页面状态
+    this._loading = false
+    this._loadingStart = 0
+    this._loadingDuration = 1800   // 启动页总时长（毫秒）
+    this._loadingT = 0            // 当前进度 0~1
+    this._paperPlanePhase = 0     // 纸飞机动画相位
   }
 
   init() {
@@ -76,11 +83,48 @@ class MainApp {
     console.log('[init] canvas:', this.screenInfo.width, 'x', this.screenInfo.height,
                 'pixelRatio:', this.screenInfo.pixelRatio)
 
+    // 启动：先显示 LOADING 页面，再初始化 Game 并进入主循环
+    this._loading = true
+    this._loadingStart = Date.now()
+    this._lastTime = this._loadingStart
+    this._loadingLoop()
+  }
+
+  _loadingLoop() {
+    try {
+      const now = Date.now()
+      const dt = now - this._lastTime
+      this._lastTime = now
+      this._paperPlanePhase += dt / 1000
+
+      // 每帧渲染加载页
+      this._renderLoading(this.ctx, this.screenInfo.width, this.screenInfo.height)
+
+      // 进度到 100% 后执行初始化
+      if (now - this._loadingStart >= this._loadingDuration) {
+        this._loading = false
+        this._finishInit()
+        return
+      }
+
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => this._loadingLoop())
+      } else {
+        setTimeout(() => this._loadingLoop(), 16)
+      }
+    } catch (e) {
+      console.error('[LOADING ERROR]', e.message)
+      this._loading = false
+      this._finishInit()
+    }
+  }
+
+  _finishInit() {
     try {
       this.input = new InputManager()
       this.game = new Game(this.canvas, this.ctx, this.input)
       this.game.init(this.screenInfo.width, this.screenInfo.height)
-      
+
       this.game.onGameEnd = (stats) => this._onGameEnd(stats)
       this.game.onBackToMenu = () => this.menuState = 'main'
 
@@ -371,6 +415,130 @@ class MainApp {
     } else if (this.game.state === GAME_STATE.ENDED) {
       this._renderGameOver(ctx, w, h)
     }
+  }
+
+  // ========== 启动加载页 ==========
+  _renderLoading(ctx, w, h) {
+    const t = Math.min(1, (Date.now() - this._loadingStart) / this._loadingDuration)
+    const cx = w / 2
+    const cy = h / 2
+    const ph = this._paperPlanePhase
+
+    // 背景：深蓝夜空渐变
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7)
+    bg.addColorStop(0, '#2a3f5f')
+    bg.addColorStop(0.6, '#1a2538')
+    bg.addColorStop(1, '#0d1320')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, w, h)
+
+    // 星点（固定种子，轻微闪烁）
+    ctx.save()
+    for (let i = 0; i < 50; i++) {
+      const sx = ((i * 137) % w)
+      const sy = ((i * 241) % h)
+      const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(ph * 1.3 + i * 0.4))
+      ctx.fillStyle = `rgba(255,255,255,${twinkle * 0.55})`
+      ctx.beginPath()
+      ctx.arc(sx, sy, 1 + (i % 3) * 0.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+
+    // 标题（渐入，从 y-20 滑到目标 y）
+    const titleY = cy - 50
+    const fadeIn = Math.min(1, t * 2.5)
+    ctx.save()
+    ctx.globalAlpha = fadeIn
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${Math.round(h * 0.09)}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillText('纸飞机大战', cx, titleY)
+
+    ctx.fillStyle = '#9ab'
+    ctx.font = `${Math.round(h * 0.032)}px sans-serif`
+    ctx.fillText('Paper Plane Battle', cx, titleY + h * 0.045)
+    ctx.restore()
+
+    // 动画纸飞机（在标题下方画 S 形轨迹）
+    const planeY = cy + 30
+    const amp = Math.min(w, h) * 0.18
+    const trajX = cx + Math.sin(ph * 1.5) * amp
+    const trajY = planeY + Math.cos(ph * 2.1) * h * 0.05
+    const planeAng = Math.atan2(Math.cos(ph * 2.1) * h * 0.05 * (-2.1),
+                                 Math.cos(ph * 1.5) * amp * 1.5)
+    this._drawPaperPlane(ctx, trajX, trajY, planeAng, Math.min(w, h) * 0.08)
+
+    // 进度条
+    const barW = Math.min(w * 0.5, 260)
+    const barH = Math.max(4, h * 0.015)
+    const barX = cx - barW / 2
+    const barY = cy + h * 0.14
+    const filled = barW * t
+
+    // 外框
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'
+    roundRect(ctx, barX - 2, barY - 2, barW + 4, barH + 4, barH + 4)
+    ctx.fill()
+
+    // 底层
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'
+    roundRect(ctx, barX, barY, barW, barH, barH / 2)
+    ctx.fill()
+
+    // 填充（带一点亮色）
+    const progGrad = ctx.createLinearGradient(barX, barY, barX + filled, barY)
+    progGrad.addColorStop(0, '#4A90D9')
+    progGrad.addColorStop(1, '#6BC0F5')
+    ctx.fillStyle = progGrad
+    roundRect(ctx, barX, barY, filled, barH, barH / 2)
+    ctx.fill()
+
+    // 进度百分比
+    ctx.fillStyle = '#cdd'
+    ctx.font = `${Math.round(h * 0.028)}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(`${Math.round(t * 100)}%`, cx, barY + barH + 6)
+    ctx.restore()
+  }
+
+  // 画一个简单的纸飞机图标（面向右侧，ang 为弧度）
+  _drawPaperPlane(ctx, cx, cy, ang, size) {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(ang)
+    ctx.strokeStyle = '#e8eef5'
+    ctx.fillStyle = 'rgba(232,238,245,0.85)'
+    ctx.lineWidth = 1.5
+
+    // 上半三角（机身）
+    ctx.beginPath()
+    ctx.moveTo(size, 0)
+    ctx.lineTo(-size * 0.55, -size * 0.6)
+    ctx.lineTo(-size * 0.2, 0)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // 下半三角（上折痕）
+    ctx.beginPath()
+    ctx.moveTo(size, 0)
+    ctx.lineTo(-size * 0.55, size * 0.6)
+    ctx.lineTo(-size * 0.2, 0)
+    ctx.closePath()
+    ctx.fillStyle = 'rgba(200,210,225,0.8)'
+    ctx.fill()
+    ctx.stroke()
+
+    // 中心线（折痕）
+    ctx.strokeStyle = 'rgba(120,140,160,0.5)'
+    ctx.beginPath()
+    ctx.moveTo(size, 0)
+    ctx.lineTo(-size * 0.2, 0)
+    ctx.stroke()
+    ctx.restore()
   }
 
   _renderMenu(ctx, w, h) {
