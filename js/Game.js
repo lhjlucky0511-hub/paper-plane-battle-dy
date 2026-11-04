@@ -138,7 +138,7 @@ class Game {
     // 圆形按钮：rect 即圆的外接矩形（_drawCircleButton 以 w/2 为半径）
     const circle = (cx, cy, r) => ({ x: cx - r, y: cy - r, w: r * 2, h: r * 2, r: Math.round(r) })
 
-    // 风按钮居中且最大；射/网/弹/技四小按钮按对角十字围绕风按钮（图 2 参考）
+    // 风按钮居中且最大；射/网/弹/技四小按钮按逆时针顺序排列（从正上方开始，最后一个导弹在正下方）
     // 四个小按钮等大，外圈轻微压在风上，风主体清晰可见
     const boostR = Math.round(34 * u)   // 风，最大
     const smallR = Math.round(22 * u)   // 射/网/弹/技，统一
@@ -146,22 +146,24 @@ class Game {
     // 风按钮中心到每个小按钮中心的距离（小按钮外圈轻微压在风上，风主体清晰）
     const d = boostR + Math.round(smallR * 0.7)
 
-    // 四个方向角（屏幕坐标 y 向下）：射右上 / 网左上 / 弹左下 / 技右下
+    // 逆时针从正上方到正下方（左半弧 180°，4 个按钮间距 60°）：
+    //   射(正上方, -90°) → 网兜(左上偏上, -150°) → 特技(左下, +150°) → 导弹(正下方, +90°)
     const ANG = {
-      FIRE:  -Math.PI / 4,     // 右上
-      NET:   -3 * Math.PI / 4, // 左上
-      MISS:   3 * Math.PI / 4, // 左下
-      STUNT:  Math.PI / 4      // 右下
+      FIRE:  -Math.PI / 2,          // 正上方
+      NET:   -5 * Math.PI / 6,      // 左上偏上（-150°）
+      STUNT:  5 * Math.PI / 6,      // 左下（+150°）
+      MISS:   Math.PI / 2           // 正下方
     }
     const dx = (ang) => Math.cos(ang) * d
     const dy = (ang) => Math.sin(ang) * d
 
-    // 边界保护：根据整体外包框算风的最大可行中心
+    // 边界保护：按整体外包框（仅左半弧）算风的最大可行中心
     const pad = Math.round(14 * u)
-    const extentX = d * Math.SQRT1_2 + smallR   // 单侧水平最大外扩
-    const extentY = d * Math.SQRT1_2 + smallR   // 单侧垂直最大外扩
-    const boostCx = Math.min(w - pad - extentX, Math.max(pad + extentX, w - Math.round(100 * u)))
-    const boostCy = Math.min(h - pad - extentY, Math.max(pad + extentY, h - Math.round(100 * u)))
+    const extentXLeft  = Math.abs(Math.cos(ANG.NET)) * d + smallR   // 左侧最大外扩
+    const extentYTop   = Math.abs(Math.sin(ANG.FIRE)) * d + smallR  // 上方最大外扩
+    const extentYBottom= Math.abs(Math.sin(ANG.MISS)) * d + smallR  // 下方最大外扩
+    const boostCx = Math.min(w - pad - smallR, Math.max(pad + extentXLeft, w - Math.round(110 * u)))
+    const boostCy = Math.min(h - pad - extentYBottom, Math.max(pad + extentYTop, h - Math.round(100 * u)))
 
     // 四个小按钮坐标
     const fireCx  = boostCx + dx(ANG.FIRE),   fireCy  = boostCy + dy(ANG.FIRE)
