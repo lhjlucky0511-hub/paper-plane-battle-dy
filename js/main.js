@@ -546,16 +546,21 @@ class MainApp {
     const L = this._menuLayout()
 
     if (this.menuState === 'main') {
-      // 主标题在屏幕正中，副标题紧贴下方
+      // 标题整体（主标题+副标题）垂直居中于屏幕正中
       ctx.save()
+      const bigFont = Math.round(h * 0.08)
+      const subFont = Math.round(h * 0.032)
+      const gap = Math.round(h * 0.025)                              // 主副标题间距
+      const totalH = bigFont + gap + subFont
+      const baseY = h * 0.5 - totalH / 2 + bigFont                   // 主标题 baseline（middle）
       ctx.fillStyle = '#fff'
-      ctx.font = `bold ${Math.round(h * 0.08)}px sans-serif`
+      ctx.font = `bold ${bigFont}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText('纸飞机大战', w / 2, h * 0.48)
+      ctx.fillText('纸飞机大战', w / 2, baseY)
       ctx.fillStyle = '#8a8a9a'
-      ctx.font = `${Math.round(h * 0.032)}px sans-serif`
-      ctx.fillText('Paper Plane Battle', w / 2, h * 0.56)
+      ctx.font = `${subFont}px sans-serif`
+      ctx.fillText('Paper Plane Battle', w / 2, baseY + gap + subFont / 2)
       ctx.restore()
 
       const labels = ['对战模式', '战役模式', '联机模式', '操作说明']
