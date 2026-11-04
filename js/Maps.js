@@ -962,29 +962,6 @@ const CLASSROOM = {
       }
     }
 
-    // 战场边界（粉笔圈）
-    const ringPts = []
-    for (let i = 0; i < 72; i++) {
-      const a = (i / 72) * Math.PI * 2
-      ringPts.push(project(Math.cos(a) * 400, Math.sin(a) * 400, 0.5))
-    }
-    tracePoly(ctx, ringPts)
-    ctx.strokeStyle = 'rgba(252, 247, 232, 0.16)'
-    ctx.lineWidth = 8
-    ctx.stroke()
-    ctx.strokeStyle = 'rgba(252, 249, 238, 0.6)'
-    ctx.lineWidth = 2.5
-    ctx.stroke()
-    // 中央十字标记
-    const cc = project(0, 0, 0.6)
-    ctx.strokeStyle = 'rgba(250, 246, 232, 0.4)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(cc.x, cc.y, 14, 0, Math.PI * 2)
-    ctx.moveTo(cc.x - 20, cc.y)
-    ctx.lineTo(cc.x + 20, cc.y)
-    ctx.stroke()
-
     // 地面碎屑：纸团 + 粉笔 + 铅笔
     const litter = [
       { x: -150, y: -60, r: 12 },

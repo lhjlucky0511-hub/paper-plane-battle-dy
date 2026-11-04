@@ -1066,21 +1066,7 @@ class Game {
 
     ctx.restore()
 
-    // 战场边界
-    ctx.strokeStyle = theme.border
-    ctx.lineWidth = 4
-    ctx.setLineDash([20, 10])
-    ctx.beginPath()
-    ctx.arc(0, 0, radius, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.setLineDash([])
-
-    // 中心标记
-    ctx.strokeStyle = 'rgba(120,120,150,0.7)'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(0, 0, 30, 0, Math.PI * 2)
-    ctx.stroke()
+    // 战场边界圈已移除
   }
 
   _renderLootField(ctx, use3D) {
