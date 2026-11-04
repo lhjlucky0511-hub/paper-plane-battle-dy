@@ -4,12 +4,14 @@ const InputManager = require('./InputManager')
 
 // 兼容版 roundRect 实现
 function roundRect(ctx, x, y, w, h, r) {
+  // 抖音引擎的 ctx.roundRect 不会重置路径，必须手动 beginPath，
+  // 否则多个按钮会累积到同一路径，后一次 fill() 会覆盖前面所有按钮
+  ctx.beginPath()
   if (typeof ctx.roundRect === 'function') {
     ctx.roundRect(x, y, w, h, r)
     return
   }
   r = Math.min(r, w / 2, h / 2)
-  ctx.beginPath()
   ctx.moveTo(x + r, y)
   ctx.lineTo(x + w - r, y)
   ctx.quadraticCurveTo(x + w, y, x + w, y + r)
@@ -46,6 +48,7 @@ class MainApp {
     
     this.menuState = 'main'  // main, modeSelect, aiSelect, help
     this.gameResult = null
+    this._lastMenuTouchTime = 0
   }
 
   init() {
@@ -102,9 +105,28 @@ class MainApp {
     // 使用抖音小游戏触摸事件
     if (typeof tt !== 'undefined') {
       tt.onTouchStart((e) => {
-        if (this.game.state === GAME_STATE.MENU || this.game.state === GAME_STATE.ENDED) {
-          const touch = e.changedTouches[0]
-          this._handleMenuTouch(touch.clientX, touch.clientY)
+        // 防止同一次点击被重复派发，导致一次触摸连续穿过两层菜单
+        const now = Date.now()
+        if (now - (this._lastMenuTouchTime || 0) < 250) return
+        this._lastMenuTouchTime = now
+
+        const touch = e.changedTouches[0]
+        const x = touch.clientX
+        const y = touch.clientY
+
+        if (this.game.state === GAME_STATE.PLAYING) {
+          // 游戏内暂停按钮
+          const btn = this._getPauseBtnRect(this.screenInfo.width, this.screenInfo.height)
+          if (this._pointInRect(x, y, btn.x, btn.y, btn.w, btn.h)) {
+            this.game.pause()
+          }
+          return
+        }
+
+        if (this.game.state === GAME_STATE.MENU ||
+            this.game.state === GAME_STATE.ENDED ||
+            this.game.state === GAME_STATE.PAUSED) {
+          this._handleMenuTouch(x, y)
         }
       })
     }
@@ -278,19 +300,25 @@ class MainApp {
 
     // 暂停界面
     if (this.game.state === GAME_STATE.PAUSED) {
+      const pauseBtnX = (w - btnW) / 2
       // 继续游戏
       const resumeY = h * 0.5
-      if (this._pointInRect(x, y, startX, resumeY, btnW, btnH)) {
+      if (this._pointInRect(x, y, pauseBtnX, resumeY, btnW, btnH)) {
         this.game.resume()
         return
       }
       // 返回主菜单
       const quitY = resumeY + btnH + 20
-      if (this._pointInRect(x, y, startX, quitY, btnW, btnH)) {
+      if (this._pointInRect(x, y, pauseBtnX, quitY, btnW, btnH)) {
         this.game.backToMenu()
         return
       }
     }
+  }
+
+  // 游戏内暂停按钮区域
+  _getPauseBtnRect(w, h) {
+    return { x: 20, y: h * 0.2, w: 64, h: 30 }
   }
 
   _pointInRect(x, y, rx, ry, rw, rh) {
@@ -355,6 +383,18 @@ class MainApp {
     } else if (this.game.state === GAME_STATE.PLAYING || 
                this.game.state === GAME_STATE.PAUSED) {
       this.game.render()
+
+      // 暂停按钮（仅游戏中显示）
+      if (this.game.state === GAME_STATE.PLAYING) {
+        const btn = this._getPauseBtnRect(w, h)
+        ctx.fillStyle = 'rgba(255,255,255,0.15)'
+        roundRect(ctx, btn.x, btn.y, btn.w, btn.h, 8)
+        ctx.fill()
+        ctx.fillStyle = '#fff'
+        ctx.font = 'bold 14px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText('暂停', btn.x + btn.w / 2, btn.y + btn.h / 2 + 5)
+      }
       
       if (this.game.state === GAME_STATE.PAUSED) {
         this._renderPauseOverlay(ctx, w, h)
@@ -365,15 +405,17 @@ class MainApp {
   }
 
   _renderMenu(ctx, w, h) {
-    // 标题
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 40px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('纸飞机大战', w / 2, h * 0.2)
-    
-    ctx.fillStyle = '#888'
-    ctx.font = '16px sans-serif'
-    ctx.fillText('Paper Plane Battle', w / 2, h * 0.2 + 30)
+    // 只在主菜单绘制游戏标题，避免与子页面标题重叠
+    if (this.menuState === 'main') {
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 40px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('纸飞机大战', w / 2, h * 0.2)
+
+      ctx.fillStyle = '#888'
+      ctx.font = '16px sans-serif'
+      ctx.fillText('Paper Plane Battle', w / 2, h * 0.2 + 30)
+    }
 
     if (this.menuState === 'main') {
       const baseY = h * 0.45
@@ -454,11 +496,16 @@ class MainApp {
       ctx.fill()
       ctx.globalAlpha = 1
 
-      // 关卡编号
+      // 关卡编号（锁定关卡显示锁图标，避免与数字重叠）
       ctx.fillStyle = '#fff'
-      ctx.font = 'bold 24px sans-serif'
       ctx.textAlign = 'center'
-      ctx.fillText(level.id, bx + btnW / 2, by + btnH / 2 + 5)
+      if (unlocked) {
+        ctx.font = 'bold 24px sans-serif'
+        ctx.fillText(level.id, bx + btnW / 2, by + btnH / 2 + 5)
+      } else {
+        ctx.font = '20px sans-serif'
+        ctx.fillText('🔒', bx + btnW / 2, by + btnH / 2 + 7)
+      }
 
       // Boss标记
       if (level.isBoss) {
@@ -472,13 +519,6 @@ class MainApp {
         ctx.fillStyle = '#fff'
         ctx.font = '10px sans-serif'
         ctx.fillText('✓', bx + btnW - 12, by + 15)
-      }
-
-      // 锁定标记
-      if (!unlocked) {
-        ctx.fillStyle = '#fff'
-        ctx.font = '16px sans-serif'
-        ctx.fillText('🔒', bx + btnW / 2, by + btnH / 2 + 5)
       }
     }
 
@@ -642,4 +682,6 @@ class MainApp {
 
 // 启动
 const app = new MainApp()
+// 暴露给调试/自动化使用的只读探针
+globalThis.__app = app
 app.init()

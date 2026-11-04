@@ -7,7 +7,7 @@ const InputManager = require('./InputManager')
 const { CampaignManager, OBJECTIVE_TYPE } = require('./CampaignSystem')
 const { LootField, LOOT_TYPES, LOOT_COLORS, LOOT_NAMES } = require('./LootSystem')
 const { STUNT_TYPES, STUNT_DEFS } = require('./StuntSystem')
-const { ParticleSystem, distance, randomRange } = require('./utils')
+const { ParticleSystem, distance, randomRange, normalizeAngle } = require('./utils')
 
 // 游戏状态
 const GAME_STATE = {
@@ -165,6 +165,8 @@ class Game {
     for (let i = 0; i < this.aiCount; i++) {
       this._spawnAI(i)
     }
+
+    console.log('[game] start ' + this.gameMode + ' ai=' + this.aiCount)
   }
 
   // 战役模式开始
@@ -194,6 +196,8 @@ class Game {
     }
     
     this._addToast(`关卡 ${this.campaignLevel.id}: ${this.campaignLevel.name}`)
+    console.log('[campaign] start level=' + this.campaignLevel.id +
+                ' enemies=' + this.campaignLevel.enemies.length)
   }
 
   _initLootField() {
@@ -514,9 +518,11 @@ class Game {
   }
 
   _handleDeathsAndRespawns() {
-    // 检查玩家死亡
-    if (this.player && !this.player.isAlive && this.player.lives >= 0) {
+    // 检查玩家死亡（deathHandled 保证每次坠机只结算一次，避免每帧重复扣命）
+    if (this.player && !this.player.isAlive && !this.player.deathHandled) {
+      this.player.deathHandled = true
       this.player.lives--
+      console.log('[player] down, lives left=' + this.player.lives)
       if (this.player.lives >= 0) {
         // 延迟重生
         setTimeout(() => {
@@ -524,15 +530,14 @@ class Game {
             this._respawnPlane(this.player)
           }
         }, CONSTS.HEALTH.RESPAWN_DELAY * 1000)
-      } else {
-        this.player.lives = -1
       }
     }
 
     // AI死亡后重生
     for (const ai of this.aiControllers) {
       const plane = ai.plane
-      if (!plane.isAlive && plane.lives > 0) {
+      if (!plane.isAlive && !plane.deathHandled && plane.lives > 0) {
+        plane.deathHandled = true
         plane.lives--
         if (plane.lives >= 0) {
           setTimeout(() => {
@@ -647,6 +652,7 @@ class Game {
     }
     this.state = GAME_STATE.ENDED
     this.gameEndTime = this.elapsed
+    console.log('[campaign] complete level=' + (level ? level.id : 0))
     if (this.onGameEnd) {
       this.onGameEnd({ ...this._getPlayerStats(), campaignWin: true, levelId: level ? level.id : 0 })
     }
@@ -656,13 +662,20 @@ class Game {
     this._addToast('任务失败！')
     this.state = GAME_STATE.ENDED
     this.gameEndTime = this.elapsed
+    console.log('[campaign] fail level=' + (this.campaignLevel ? this.campaignLevel.id : 0))
     if (this.onGameEnd) {
       this.onGameEnd({ ...this._getPlayerStats(), campaignWin: false })
     }
   }
 
   _checkGameEnd() {
-    if (this.gameMode === 'campaign') return  // 战役模式由 objective 控制结束
+    if (this.gameMode === 'campaign') {
+      // 战役模式：达成目标结束，玩家无命时判定失败
+      if (this.player && this.player.lives < 0) {
+        this._onCampaignFail()
+      }
+      return
+    }
 
     if (this.gameMode === CONSTS.GAME_MODE.PRACTICE) {
       // 练习模式：玩家无命时结束

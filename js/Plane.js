@@ -29,6 +29,7 @@ class Plane {
     // 状态
     this.isAlive = true
     this.isCrashing = false
+    this.deathHandled = false
     this.invulnTimer = options.invulnTimer || CONSTS.HEALTH.INVULN_ON_SPAWN
     this.health = options.maxHealth || CONSTS.HEALTH.MAX
     this.maxHealth = options.maxHealth || CONSTS.HEALTH.MAX
@@ -329,6 +330,7 @@ class Plane {
     this.health = this.maxHealth
     this.isAlive = true
     this.isCrashing = false
+    this.deathHandled = false
     this.invulnTimer = CONSTS.HEALTH.INVULN_ON_SPAWN
     this.speed = CONSTS.PLANE.CRUISE_SPEED
     this.targetSpeed = CONSTS.PLANE.CRUISE_SPEED

@@ -47,6 +47,9 @@ class InputManager {
     // 虚拟按钮位置（需要在 init 时根据屏幕尺寸设置）
     this.uiLayout = null
 
+    // 触摸事件去重
+    this._lastStartTouch = null
+
     this._setupListeners()
   }
 
@@ -73,7 +76,16 @@ class InputManager {
 
   _onTouchStart(e) {
     const touches = e.changedTouches
+    const now = Date.now()
     for (const touch of touches) {
+      // 抖音模拟器可能把同一次点击派发两次，这里按坐标+时间窗口去重
+      const cx = Math.round(touch.clientX)
+      const cy = Math.round(touch.clientY)
+      const last = this._lastStartTouch
+      if (last && last.cx === cx && last.cy === cy && now - last.t < 120) {
+        continue
+      }
+      this._lastStartTouch = { cx, cy, t: now }
       this._handleTouchStart(touch)
     }
   }
