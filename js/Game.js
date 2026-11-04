@@ -130,9 +130,9 @@ class Game {
     // 圆形按钮：rect 即圆的外接矩形（_drawCircleButton 以 w/2 为半径）
     const circle = (cx, cy, r) => ({ x: cx - r, y: cy - r, w: r * 2, h: r * 2, r: Math.round(r) })
 
-    const fireR = Math.round(34 * u)
-    const boostR = Math.round(32 * u)
-    const smallR = Math.round(22 * u)
+    const fireR = Math.round(30 * u)
+    const boostR = Math.round(27 * u)
+    const smallR = Math.round(19 * u)
 
     // 摇杆（左下角，位于雷达下方）
     const jsSize = Math.round(130 * u)
@@ -160,11 +160,11 @@ class Game {
       joystick: {
         base: { x: jsCx - jsSize / 2, y: jsCy - jsSize / 2, w: jsSize, h: jsSize }
       },
-      fire: circle(w - Math.round(96 * u), h - Math.round(150 * u), fireR),
-      boost: circle(w - Math.round(96 * u), h - Math.round(74 * u), boostR),
-      net: circle(w - Math.round(166 * u), h - Math.round(126 * u), smallR),
-      missile: circle(w - Math.round(150 * u), h - Math.round(56 * u), smallR),
-      stunt: circle(w - Math.round(232 * u), h - Math.round(88 * u), smallR),
+      fire: circle(w - Math.round(90 * u), h - Math.round(173 * u), fireR),
+      boost: circle(w - Math.round(93 * u), h - Math.round(110 * u), boostR),
+      net: circle(w - Math.round(149 * u), h - Math.round(144 * u), smallR),
+      missile: circle(w - Math.round(140 * u), h - Math.round(105 * u), smallR),
+      stunt: circle(w - Math.round(90 * u), h - Math.round(59 * u), smallR),
       stuntList: stuntList,
       hud: {
         pause: { x: Math.round(14 * u), y: 6, w: Math.round(70 * u), h: Math.round(28 * u) },
@@ -1182,25 +1182,26 @@ class Game {
     const player = this.player
 
     // 射（机炮）：大蓝圆
-    this._drawCircleButton(ctx, layout.fire, '射', '#2E86DE', this.input.buttons.fire, null)
+    this._drawCircleButton(ctx, layout.fire, '射', '#3A6FAB', this.input.buttons.fire, null, null)
 
     // 风（加速）：青色圆
-    this._drawCircleButton(ctx, layout.boost, '风', '#17A2B8', this.input.buttons.boost, null)
+    this._drawCircleButton(ctx, layout.boost, '风', '#2E8B7B', this.input.buttons.boost, null, null)
 
-    // 导弹 / 网兜：小圆 + 弹药角标
-    const missileReady = player.canFireMissile()
-    this._drawCircleButton(ctx, layout.missile, '弹', missileReady ? '#C0392B' : '#555', missileReady, player.missileAmmo)
-
+    // 网兜：绿色小圆（网格图标）+ 数量角标
     const netReady = player.canFireNet()
-    this._drawCircleButton(ctx, layout.net, '网', netReady ? '#27AE60' : '#555', netReady, player.netAmmo)
+    this._drawCircleButton(ctx, layout.net, null, netReady ? '#3E8E4A' : '#555', netReady, player.netAmmo, 'grid')
 
-    // 特技：小圆 + 冷却角标
+    // 导弹：红色小圆（箭头图标）+ 数量角标
+    const missileReady = player.canFireMissile()
+    this._drawCircleButton(ctx, layout.missile, null, missileReady ? '#C0392B' : '#555', missileReady, player.missileAmmo, 'arrow')
+
+    // 特技：红色小圆（笔尖图标）+ 冷却角标
     const stuntType = this.input.selectedStunt
     const stuntDef = STUNT_DEFS[stuntType]
     const stuntCd = player.stunt.getStuntCooldown(stuntType)
     const stuntReady = stuntCd <= 0 && player.wind >= stuntDef.cost
-    this._drawCircleButton(ctx, layout.stunt, '技', stuntReady ? '#B03A2E' : '#555', stuntReady,
-                           stuntCd > 0 ? Math.ceil(stuntCd) : null)
+    this._drawCircleButton(ctx, layout.stunt, null, stuntReady ? '#C0392B' : '#555', stuntReady,
+                           stuntCd > 0 ? Math.ceil(stuntCd) : null, 'pencil')
 
     // 右上竖排特技列表
     this._renderStuntList(ctx)
@@ -1283,7 +1284,7 @@ class Game {
     ctx.restore()
   }
 
-  _drawCircleButton(ctx, rect, label, color, active, badge) {
+  _drawCircleButton(ctx, rect, label, color, active, badge, icon) {
     if (!rect) return
     const cx = rect.x + rect.w / 2
     const cy = rect.y + rect.h / 2
@@ -1303,11 +1304,15 @@ class Game {
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.stroke()
 
-    ctx.fillStyle = '#fff'
-    ctx.font = `bold ${Math.max(10, Math.round(r * 0.62))}px sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(label, cx, cy)
+    if (icon) {
+      this._drawButtonIcon(ctx, icon, cx, cy, r)
+    } else {
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold ${Math.max(10, Math.round(r * 0.62))}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label, cx, cy)
+    }
 
     if (badge !== null && badge !== undefined) {
       const br = Math.max(7, r * 0.42)
@@ -1319,7 +1324,60 @@ class Game {
       ctx.fill()
       ctx.fillStyle = '#FFD700'
       ctx.font = `bold ${Math.max(8, Math.round(br * 0.9))}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
       ctx.fillText(String(badge), bx, by + 1)
+    }
+    ctx.restore()
+  }
+
+  // 小按钮图标：网格（网兜）/ 双箭头（导弹）/ 笔尖（特技）
+  _drawButtonIcon(ctx, type, cx, cy, r) {
+    const s = r * 0.5
+    ctx.save()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+
+    if (type === 'grid') {
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath()
+        ctx.moveTo(cx + i * s, cy - s)
+        ctx.lineTo(cx + i * s, cy + s)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(cx - s, cy + i * s)
+        ctx.lineTo(cx + s, cy + i * s)
+        ctx.stroke()
+      }
+    } else if (type === 'arrow') {
+      // 斜向双箭头
+      ctx.beginPath()
+      ctx.moveTo(cx - s, cy + s)
+      ctx.lineTo(cx + s, cy - s)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(cx + s - s * 0.8, cy - s)
+      ctx.lineTo(cx + s, cy - s)
+      ctx.lineTo(cx + s, cy - s + s * 0.8)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(cx - s + s * 0.8, cy + s)
+      ctx.lineTo(cx - s, cy + s)
+      ctx.lineTo(cx - s, cy + s - s * 0.8)
+      ctx.stroke()
+    } else if (type === 'pencil') {
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.moveTo(cx - s * 0.7, cy + s * 0.7)
+      ctx.lineTo(cx + s, cy - s)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(cx - s * 0.7, cy + s * 0.7)
+      ctx.lineTo(cx - s * 0.1, cy + s * 0.45)
+      ctx.lineTo(cx - s * 0.45, cy + s * 0.1)
+      ctx.closePath()
+      ctx.fillStyle = '#fff'
+      ctx.fill()
     }
     ctx.restore()
   }
