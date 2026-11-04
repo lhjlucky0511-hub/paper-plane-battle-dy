@@ -43,10 +43,10 @@ class LevelDef {
 
 // 战役配置表
 const CAMPAIGN_CHAPTERS = [
-  { id: 1, name: '第1章·书桌战场', mapId: 'classroom' },
-  { id: 2, name: '第2章·遗迹迷途', mapId: 'canyon' },
-  { id: 3, name: '第3章·星核决战', mapId: 'starcore' },
-  { id: 4, name: '第4章·都市峡谷', mapId: 'city' }
+  { id: 1, name: '书桌战场', mapId: 'classroom' },
+  { id: 2, name: '遗迹迷途', mapId: 'canyon' },
+  { id: 3, name: '星核决战', mapId: 'starcore' },
+  { id: 4, name: '都市峡谷', mapId: 'city' }
 ]
 
 // 26关关卡数据

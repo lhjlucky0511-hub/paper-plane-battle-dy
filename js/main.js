@@ -436,13 +436,13 @@ class MainApp {
   }
 
   _renderCampaignChapters(ctx, w, h, L) {
-    this._drawPageTitle(ctx, w, '选择章节', '', h * 0.14)
+    this._drawPageTitle(ctx, w, '选择地图', '', h * 0.14)
 
     const chapters = [
-      { name: '第1章·书桌战场', desc: '7关' },
-      { name: '第2章·遗迹迷途', desc: '7关' },
-      { name: '第3章·星核决战', desc: '5关' },
-      { name: '第4章·都市峡谷', desc: '7关' }
+      { name: '书桌战场', desc: '7关' },
+      { name: '遗迹迷途', desc: '7关' },
+      { name: '星核决战', desc: '5关' },
+      { name: '都市峡谷', desc: '7关' }
     ]
     const colors = ['#4A90D9', '#E74C3C', '#9B59B6', '#F39C12']
 
