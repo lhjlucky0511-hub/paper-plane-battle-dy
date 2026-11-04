@@ -53,9 +53,9 @@ class MainApp {
     // 加载页面状态
     this._loading = false
     this._loadingStart = 0
-    this._loadingDuration = 1800   // 启动页总时长（毫秒）
-    this._loadingT = 0            // 当前进度 0~1
-    this._paperPlanePhase = 0     // 纸飞机动画相位
+    this._loadingDuration = 500     // 启动页总时长（毫秒）
+    this._loadingT = 0              // 当前进度 0~1
+    this._paperPlanePhase = 0       // 纸飞机动画相位（已不用，保留字段）
   }
 
   init() {
@@ -425,10 +425,8 @@ class MainApp {
 
   // ========== 启动加载页 ==========
   _renderLoading(ctx, w, h) {
-    const t = Math.min(1, (Date.now() - this._loadingStart) / this._loadingDuration)
     const cx = w / 2
     const cy = h / 2
-    const ph = this._paperPlanePhase
 
     // 背景：深蓝夜空渐变
     const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7)
@@ -438,75 +436,35 @@ class MainApp {
     ctx.fillStyle = bg
     ctx.fillRect(0, 0, w, h)
 
-    // 星点（固定种子，轻微闪烁）
+    // 固定星点（静态，无动画）
     ctx.save()
     for (let i = 0; i < 50; i++) {
-      const sx = ((i * 137) % w)
-      const sy = ((i * 241) % h)
-      const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(ph * 1.3 + i * 0.4))
-      ctx.fillStyle = `rgba(255,255,255,${twinkle * 0.55})`
+      const sx = (i * 137) % w
+      const sy = (i * 241) % h
+      ctx.fillStyle = `rgba(255,255,255,${0.45 + (i % 5) * 0.05})`
       ctx.beginPath()
       ctx.arc(sx, sy, 1 + (i % 3) * 0.5, 0, Math.PI * 2)
       ctx.fill()
     }
     ctx.restore()
 
-    // 标题（渐入，从 y-20 滑到目标 y）
-    const titleY = cy - 50
-    const fadeIn = Math.min(1, t * 2.5)
+    // 静态标题（纸飞机大战 + Paper Plane Battle，垂直居中）
     ctx.save()
-    ctx.globalAlpha = fadeIn
-    ctx.fillStyle = '#fff'
-    ctx.font = `bold ${Math.round(h * 0.09)}px sans-serif`
+    const bigFont = Math.round(h * 0.09)
+    const subFont = Math.round(h * 0.032)
+    const visualGap = Math.round(h * 0.025)
+    const totalVisualH = bigFont + visualGap + subFont
+    const groupTop = cy - totalVisualH / 2
+    const mainY = groupTop + bigFont
+    const subY = mainY + visualGap + subFont
     ctx.textAlign = 'center'
     ctx.textBaseline = 'alphabetic'
-    ctx.fillText('纸飞机大战', cx, titleY)
-
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${bigFont}px sans-serif`
+    ctx.fillText('纸飞机大战', cx, mainY)
     ctx.fillStyle = '#9ab'
-    ctx.font = `${Math.round(h * 0.032)}px sans-serif`
-    ctx.fillText('Paper Plane Battle', cx, titleY + h * 0.045)
-    ctx.restore()
-
-    // 动画纸飞机（在标题下方画 S 形轨迹）
-    const planeY = cy + 30
-    const amp = Math.min(w, h) * 0.18
-    const trajX = cx + Math.sin(ph * 1.5) * amp
-    const trajY = planeY + Math.cos(ph * 2.1) * h * 0.05
-    const planeAng = Math.atan2(Math.cos(ph * 2.1) * h * 0.05 * (-2.1),
-                                 Math.cos(ph * 1.5) * amp * 1.5)
-    this._drawPaperPlane(ctx, trajX, trajY, planeAng, Math.min(w, h) * 0.08)
-
-    // 进度条
-    const barW = Math.min(w * 0.5, 260)
-    const barH = Math.max(4, h * 0.015)
-    const barX = cx - barW / 2
-    const barY = cy + h * 0.14
-    const filled = barW * t
-
-    // 外框
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'
-    roundRect(ctx, barX - 2, barY - 2, barW + 4, barH + 4, barH + 4)
-    ctx.fill()
-
-    // 底层
-    ctx.fillStyle = 'rgba(255,255,255,0.15)'
-    roundRect(ctx, barX, barY, barW, barH, barH / 2)
-    ctx.fill()
-
-    // 填充（带一点亮色）
-    const progGrad = ctx.createLinearGradient(barX, barY, barX + filled, barY)
-    progGrad.addColorStop(0, '#4A90D9')
-    progGrad.addColorStop(1, '#6BC0F5')
-    ctx.fillStyle = progGrad
-    roundRect(ctx, barX, barY, filled, barH, barH / 2)
-    ctx.fill()
-
-    // 进度百分比
-    ctx.fillStyle = '#cdd'
-    ctx.font = `${Math.round(h * 0.028)}px sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    ctx.fillText(`${Math.round(t * 100)}%`, cx, barY + barH + 6)
+    ctx.font = `${subFont}px sans-serif`
+    ctx.fillText('Paper Plane Battle', cx, subY)
     ctx.restore()
   }
 
