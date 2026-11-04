@@ -134,10 +134,10 @@ class Game {
     const boostR = Math.round(32 * u)
     const smallR = Math.round(22 * u)
 
-    // 摇杆（左侧中部，参考截图）
-    const jsSize = Math.round(114 * u)
-    const jsCx = Math.round(w * 0.125)
-    const jsCy = Math.round(h * 0.5)
+    // 摇杆（左下角，位于雷达下方）
+    const jsSize = Math.round(130 * u)
+    const jsCx = Math.round(w * 0.118)
+    const jsCy = h - Math.round(74 * u)
 
     // 右上竖排特技列表：4 行
     const listW = Math.min(132, Math.round(w * 0.16))
@@ -174,7 +174,7 @@ class Game {
         barW: Math.round(Math.min(260, w * 0.30)),
         barH: 10,
         panel: { x: Math.round(14 * u), y: 40, w: Math.round(214 * u), h: 68 },
-        radar: { x: Math.round(86 * u), y: h - Math.round(64 * u), size: Math.round(90 * u) }
+        radar: { x: Math.round(86 * u), y: Math.round(h * 0.42), size: Math.round(90 * u) }
       }
     }
   }
@@ -1279,7 +1279,7 @@ class Game {
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('前进方向', cx, base.y + base.h + 12)
+    ctx.fillText('前进方向', cx, base.y - 9)
     ctx.restore()
   }
 
