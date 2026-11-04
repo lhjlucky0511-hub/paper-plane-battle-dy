@@ -138,24 +138,28 @@ class Game {
     // 圆形按钮：rect 即圆的外接矩形（_drawCircleButton 以 w/2 为半径）
     const circle = (cx, cy, r) => ({ x: cx - r, y: cy - r, w: r * 2, h: r * 2, r: Math.round(r) })
 
-    // 风按钮居中 + 四个小按钮围绕（射/网/弹/技），风比其他四个略大
-    const boostR = Math.round(32 * u)
-    const otherR = Math.round(22 * u)
-    const btnGap = Math.round(10 * u)
-    const dist = boostR + otherR + btnGap  // 小按钮中心到风中心的距离
+    // 参考图布局：射(蓝最大,右上) 风(青绿第二,射正下方) 同列贴右；
+    // 网兜在二者之间偏左；双箭头/导弹在风的左下。三个小圆大小一致。
+    const fireR  = Math.round(36 * u)   // 射，最大
+    const boostR = Math.round(30 * u)   // 风，第二大
+    const smallR = Math.round(22 * u)   // 网/弹/技，统一
 
-    // 风按钮中心（确保四向按钮都在屏幕内）
-    // 按钮簇整体半宽 = boostR + dist，两边至少留 12 边距
-    const pad = Math.round(12 * u)
-    const half = boostR + dist
-    const boostCx = Math.min(w - pad - half, w - Math.round(120 * u))
-    const boostCy = Math.min(h - pad - half, h - Math.round(130 * u))
+    const fireCx  = w - Math.round(70 * u),   fireCy  = h - Math.round(155 * u)
+    const boostCx = w - Math.round(70 * u),   boostCy = h - Math.round(85 * u)
+    const netCx   = w - Math.round(150 * u),  netCy   = h - Math.round(120 * u)
+    const misCx   = w - Math.round(170 * u),  misCy   = h - Math.round(55 * u)
+    const stCx    = w - Math.round(150 * u),  stCy    = h - Math.round(55 * u)
 
-    // 四个小按钮：射(右上)、网(左上)、弹(左下)、技(右下)
-    const fireCx = boostCx + dist,              fireCy = boostCy - dist
-    const netCx  = boostCx - dist,              netCy  = boostCy - dist
-    const misCx  = boostCx - dist,              misCy  = boostCy + dist
-    const stCx   = boostCx + dist,              stCy   = boostCy + dist
+    // 边界保护：按钮不超出屏幕
+    const clampBtn = (cx, cy, r) => ({
+      cx: Math.max(r + 4, Math.min(w - r - 4, cx)),
+      cy: Math.max(r + 4, Math.min(h - r - 4, cy))
+    })
+    const _f  = clampBtn(fireCx,  fireCy,  fireR)
+    const _b  = clampBtn(boostCx, boostCy, boostR)
+    const _n  = clampBtn(netCx,   netCy,   smallR)
+    const _m  = clampBtn(misCx,   misCy,   smallR)
+    const _s  = clampBtn(stCx,    stCy,    smallR)
 
     // 摇杆（左下角，位于雷达下方）
     const jsSize = Math.round(130 * u)
@@ -183,11 +187,11 @@ class Game {
       joystick: {
         base: { x: jsCx - jsSize / 2, y: jsCy - jsSize / 2, w: jsSize, h: jsSize }
       },
-      boost: circle(boostCx, boostCy, boostR),
-      fire:  circle(fireCx,  fireCy,  otherR),
-      net:   circle(netCx,   netCy,   otherR),
-      missile: circle(misCx, misCy, otherR),
-      stunt: circle(stCx,    stCy,    otherR),
+      boost: circle(_b.cx, _b.cy, boostR),
+      fire:  circle(_f.cx, _f.cy, fireR),
+      net:   circle(_n.cx, _n.cy, smallR),
+      missile: circle(_m.cx, _m.cy, smallR),
+      stunt: circle(_s.cx, _s.cy, smallR),
       stuntList: stuntList,
       hud: {
         pause: { x: Math.round(14 * u), y: 6, w: Math.round(70 * u), h: Math.round(28 * u) },
