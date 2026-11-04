@@ -83,10 +83,16 @@ class MainApp {
     console.log('[init] canvas:', this.screenInfo.width, 'x', this.screenInfo.height,
                 'pixelRatio:', this.screenInfo.pixelRatio)
 
-    // 跳过 loading，直接同步初始化 Game 并进入主循环
-    // 引擎原生启动封面（白底黑字）在 game.js 执行前就显示，代码层面赶不上，
-    // 但让 Canvas 尽快有内容能让它尽快隐藏
-    this._finishInit()
+    // 启动：先显示 LOADING 页面，再初始化 Game 并进入主循环
+    this._loading = true
+    this._loadingStart = Date.now()
+    this._lastTime = this._loadingStart
+    this._paperPlanePhase = 0
+
+    // 立即画第一帧 loading（消除 game.js 预画 → main.js 首帧之间可能的间隙）
+    this._renderLoading(this.ctx, this.screenInfo.width, this.screenInfo.height)
+
+    this._loadingLoop()
   }
 
   _loadingLoop() {
