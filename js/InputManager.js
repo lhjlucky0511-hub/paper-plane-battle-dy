@@ -117,8 +117,11 @@ class InputManager {
     }
 
     // 判断点击的是哪个控件
-    if (this._pointInRect(clientX, clientY, layout.joystick.base)) {
-      this._startJoystick(clientX, clientY, identifier)
+    if (layout.joystick && this._pointInRect(clientX, clientY, layout.joystick.base)) {
+      // 固定基座：摇杆起点始终是基座圆心，摇杆头跟随手指
+      const base = layout.joystick.base
+      this._startJoystick(base.x + base.w / 2, base.y + base.h / 2, identifier)
+      this._moveJoystick(clientX, clientY)
     } else if (this._pointInRect(clientX, clientY, layout.boost)) {
       this.buttons.boost = true
       this.boostTouchId = identifier
@@ -136,12 +139,14 @@ class InputManager {
       this.stuntReqId++
       this.buttonPressed.stunt = true
       this.stuntTouchId = identifier
-    } else if (layout.stuntSelect && this._pointInRect(clientX, clientY, layout.stuntSelect)) {
-      // 特技选择按钮：切换特技类型
-      this.selectedStunt = (this.selectedStunt % 4) + 1
+    } else if (this._stuntRowAt(clientX, clientY)) {
+      // 右上竖排特技列表：点选即切换当前特技
+      this.selectedStunt = this._stuntRowAt(clientX, clientY).stuntType
     } else {
-      // 默认左下为摇杆
-      if (clientX < this._screenWidth() * 0.4 && !this.joystick.active) {
+      // 兜底：左下空白区域也可以起摇杆（避开顶部暂停/视角按钮）
+      if (clientX < this._screenWidth() * 0.4 &&
+          clientY > this._screenHeight() * 0.3 &&
+          !this.joystick.active) {
         this._startJoystick(clientX, clientY, identifier)
       }
     }
@@ -216,8 +221,19 @@ class InputManager {
   }
 
   _pointInRect(x, y, rect) {
+    if (!rect) return false
     return x >= rect.x && x <= rect.x + rect.w &&
            y >= rect.y && y <= rect.y + rect.h
+  }
+
+  // 命中右上角竖排特技列表中的某一行
+  _stuntRowAt(x, y) {
+    const list = this.uiLayout && this.uiLayout.stuntList
+    if (!list) return null
+    for (const row of list) {
+      if (this._pointInRect(x, y, row)) return row
+    }
+    return null
   }
 
   _screenWidth() {
@@ -225,6 +241,13 @@ class InputManager {
       return tt.getSystemInfoSync().windowWidth
     }
     return 375
+  }
+
+  _screenHeight() {
+    if (typeof tt !== 'undefined') {
+      return tt.getSystemInfoSync().windowHeight
+    }
+    return 667
   }
 
   // 键盘调试支持

@@ -10,6 +10,26 @@ const { STUNT_TYPES, STUNT_DEFS } = require('./StuntSystem')
 const { ParticleSystem, distance, randomRange, normalizeAngle } = require('./utils')
 const { getMapTheme, DEFAULT_MAP_ID } = require('./Maps')
 
+// 圆角矩形路径（每次调用前重置路径，避免多按钮路径累积）
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r)
+    return
+  }
+  const rr = Math.min(r, w / 2, h / 2)
+  ctx.moveTo(x + rr, y)
+  ctx.lineTo(x + w - rr, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr)
+  ctx.lineTo(x + w, y + h - rr)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h)
+  ctx.lineTo(x + rr, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr)
+  ctx.lineTo(x, y + rr)
+  ctx.quadraticCurveTo(x, y, x + rr, y)
+  ctx.closePath()
+}
+
 // 游戏状态
 const GAME_STATE = {
   MENU: 'menu',
@@ -81,62 +101,80 @@ class Game {
 
     // 战斗场地半径
     this.arenaRadius = CONSTS.ARENA.RADIUS
+
+    // 视角缩放（右上角「视角」按钮切换）
+    this.zoom = 1
+
+    // 屏幕 HUD 布局（横屏）
+    this.hudLayout = null
   }
 
   init(width, height) {
     this.screenWidth = width
     this.screenHeight = height
+    // 横屏：以高度为基准，保证圆形战场纵向填满约 90% 屏幕
     this.viewScale = Math.min(width, height) / 900
 
     // 设置UI布局
     const layout = this._computeUILayout()
     this.input.init(layout)
+    this.hudLayout = layout.hud
   }
 
+  // 横屏布局：左侧摇杆 + 右下圆形按钮簇 + 右上竖排特技列表
   _computeUILayout() {
     const w = this.screenWidth
     const h = this.screenHeight
-    const buttonSize = 70
+    const u = h / 393          // 以 852x393 为基准的缩放单位
+
+    // 圆形按钮：rect 即圆的外接矩形（_drawCircleButton 以 w/2 为半径）
+    const circle = (cx, cy, r) => ({ x: cx - r, y: cy - r, w: r * 2, h: r * 2, r: Math.round(r) })
+
+    const fireR = Math.round(34 * u)
+    const boostR = Math.round(32 * u)
+    const smallR = Math.round(22 * u)
+
+    // 摇杆（左侧中部，参考截图）
+    const jsSize = Math.round(114 * u)
+    const jsCx = Math.round(w * 0.125)
+    const jsCy = Math.round(h * 0.5)
+
+    // 右上竖排特技列表：4 行
+    const listW = Math.min(132, Math.round(w * 0.16))
+    const listH = Math.round(26 * u)
+    const listGap = Math.round(7 * u)
+    const listX = w - listW - Math.round(8 * u)
+    const listY = Math.round(h * 0.11)
+    const stuntList = []
+    for (let i = 0; i < 4; i++) {
+      stuntList.push({
+        x: listX,
+        y: listY + i * (listH + listGap),
+        w: listW,
+        h: listH,
+        stuntType: i + 1
+      })
+    }
 
     return {
       joystick: {
-        base: { x: 30, y: h - 130, w: 120, h: 120 }
+        base: { x: jsCx - jsSize / 2, y: jsCy - jsSize / 2, w: jsSize, h: jsSize }
       },
-      boost: {
-        x: w - buttonSize - 30,
-        y: h - buttonSize - 30,
-        w: buttonSize,
-        h: buttonSize
-      },
-      fire: {
-        x: w - buttonSize * 2 - 40,
-        y: h - buttonSize * 2 - 40,
-        w: buttonSize,
-        h: buttonSize
-      },
-      missile: {
-        x: w - buttonSize - 30,
-        y: h - buttonSize * 3 - 50,
-        w: buttonSize,
-        h: buttonSize
-      },
-      net: {
-        x: w - buttonSize * 2 - 40,
-        y: h - buttonSize * 3 - 50,
-        w: buttonSize,
-        h: buttonSize
-      },
-      stunt: {
-        x: 30,
-        y: h - buttonSize * 2 - 30,
-        w: buttonSize,
-        h: buttonSize
-      },
-      stuntSelect: {
-        x: 30 + buttonSize + 10,
-        y: h - buttonSize * 2 - 30,
-        w: buttonSize * 0.7,
-        h: buttonSize
+      fire: circle(w - Math.round(96 * u), h - Math.round(150 * u), fireR),
+      boost: circle(w - Math.round(96 * u), h - Math.round(74 * u), boostR),
+      net: circle(w - Math.round(166 * u), h - Math.round(126 * u), smallR),
+      missile: circle(w - Math.round(150 * u), h - Math.round(56 * u), smallR),
+      stunt: circle(w - Math.round(232 * u), h - Math.round(88 * u), smallR),
+      stuntList: stuntList,
+      hud: {
+        pause: { x: Math.round(14 * u), y: 6, w: Math.round(70 * u), h: Math.round(28 * u) },
+        zoom: { x: w - Math.round(84 * u), y: 6, w: Math.round(76 * u), h: Math.round(28 * u) },
+        barX: Math.round(96 * u),
+        barY: 8,
+        barW: Math.round(Math.min(260, w * 0.30)),
+        barH: 10,
+        panel: { x: Math.round(14 * u), y: 40, w: Math.round(214 * u), h: 68 },
+        radar: { x: Math.round(86 * u), y: h - Math.round(64 * u), size: Math.round(90 * u) }
       }
     }
   }
@@ -742,7 +780,7 @@ class Game {
     // 相机变换
     ctx.save()
     ctx.translate(w / 2, h / 2)
-    ctx.scale(this.viewScale, this.viewScale)
+    ctx.scale(this.viewScale * this.zoom, this.viewScale * this.zoom)
     ctx.translate(-camX, -camY)
 
     // 渲染战场
@@ -814,7 +852,7 @@ class Game {
     ctx.globalAlpha = 1
 
     // 地图主题装饰
-    theme.draw(ctx, radius)
+    theme.draw(ctx, radius, this.elapsed)
 
     ctx.restore()
 
@@ -918,77 +956,68 @@ class Game {
 
     if (!this.player) return
 
-    // 左上：血条和能量条
-    const barX = 20
-    const barY = 20
-    const barW = 200
-    const barH = 15
+    const player = this.player
+    const hud = this.hudLayout
 
-    // 血条背景
-    ctx.fillStyle = '#333'
-    ctx.fillRect(barX, barY, barW, barH)
-    // 血条
-    const hpPercent = this.player.health / this.player.maxHealth
-    ctx.fillStyle = hpPercent > 0.5 ? '#2ECC71' : hpPercent > 0.25 ? '#F39C12' : '#E74C3C'
-    ctx.fillRect(barX, barY, barW * hpPercent, barH)
-    // 血条文字
+    // 左上：暂停按钮 / 右上：视角按钮
+    this._drawChip(ctx, hud.pause, '暂停')
+    this._drawChip(ctx, hud.zoom, this.zoom > 1 ? '视角 ×2' : '视角')
+
+    // 顶部双色条：耐久（青）/ 能量（蓝）
+    const bx = hud.barX
+    const by = hud.barY
+    const bw = hud.barW
+    const bh = hud.barH
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'
+    ctx.fillRect(bx, by, bw, bh)
+    const hpPercent = Math.max(0, Math.min(1, player.health / player.maxHealth))
+    ctx.fillStyle = hpPercent > 0.5 ? '#2ECCB0' : hpPercent > 0.25 ? '#F39C12' : '#E74C3C'
+    ctx.fillRect(bx, by, bw * hpPercent, bh)
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'
+    ctx.fillRect(bx, by + bh + 4, bw, bh)
+    const windPercent = Math.max(0, Math.min(1, player.wind / CONSTS.WIND.MAX))
+    ctx.fillStyle = player.isBoostOverheated ? '#E74C3C' : '#4A90D9'
+    ctx.fillRect(bx, by + bh + 4, bw * windPercent, bh)
+
+    // 左上信息面板
+    const panel = hud.panel
+    ctx.fillStyle = 'rgba(18,28,44,0.72)'
+    ctx.fillRect(panel.x, panel.y, panel.w, panel.h)
+
     ctx.fillStyle = '#fff'
     ctx.font = '12px sans-serif'
     ctx.textAlign = 'left'
-    ctx.fillText(`HP: ${Math.ceil(this.player.health)}`, barX + 5, barY + 12)
+    ctx.textBaseline = 'alphabetic'
+    const tx = panel.x + 8
+    const ty = panel.y + 17
+    const remain = this.aiControllers.filter(c => c.plane.isAlive || c.plane.lives > 0).length
 
-    // 能量条
-    ctx.fillStyle = '#333'
-    ctx.fillRect(barX, barY + 22, barW, barH)
-    ctx.fillStyle = this.player.isBoostOverheated ? '#E74C3C' : CONSTS.COLORS.WIND_BAR
-    ctx.fillRect(barX, barY + 22, barW * (this.player.wind / CONSTS.WIND.MAX), barH)
-    ctx.fillStyle = '#fff'
-    ctx.fillText(`能量: ${Math.ceil(this.player.wind)}`, barX + 5, barY + 34)
+    ctx.fillText(`命数 ${Math.max(0, player.lives + 1)}   击杀 ${player.kills}`, tx, ty)
+    ctx.fillText(`耐久 ${Math.ceil(player.health)}/${Math.round(player.maxHealth)}`, tx, ty + 16)
+    ctx.fillText(`对手剩余 ${remain}`, tx, ty + 32)
+    const ammoLine = player.missileAmmo > 0 ? `导弹 ×${player.missileAmmo}` : '没有导弹'
+    const netLine = player.netAmmo > 0 ? `网兜 ×${player.netAmmo}` : '没有网兜'
+    ctx.fillText(`${ammoLine} · ${netLine}`, tx, ty + 48)
 
-    // 生命数
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 16px sans-serif'
-    ctx.fillText(`生命: ${Math.max(0, this.player.lives + 1)}`, barX, barY + 60)
-
-    // 击杀数
-    ctx.fillText(`击杀: ${this.player.kills}`, barX, barY + 80)
-
-    // 战役目标
+    // 战役目标横幅（顶部居中）
     if (this.gameMode === 'campaign' && this.campaignLevel) {
-      const objText = this.campaign.getObjectiveText()
       ctx.fillStyle = '#F1C40F'
-      ctx.font = 'bold 14px sans-serif'
-      ctx.fillText(`目标: ${objText}`, barX, barY + 105)
+      ctx.font = 'bold 13px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(`目标: ${this.campaign.getObjectiveText()}   金币 ${this.coins}`, w / 2, 20)
+      ctx.textAlign = 'left'
+    } else {
+      ctx.fillStyle = '#F1C40F'
+      ctx.font = 'bold 12px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(`金币 ${this.coins}`, w / 2, 20)
+      ctx.textAlign = 'left'
     }
 
-    // 金币
-    ctx.fillStyle = '#F1C40F'
-    ctx.fillText(`金币: ${this.coins}`, barX, barY + 125)
-
-    // 右上：雷达
-    this._renderRadar(ctx, w - 120, 60)
-
-    // 右下：弹药
-    const ammoX = w - 120
-    const ammoY = h - 140
-    
-    ctx.fillStyle = '#fff'
-    ctx.font = '14px sans-serif'
-    ctx.textAlign = 'left'
-    
-    // 导弹
-    ctx.fillStyle = CONSTS.COLORS.MISSILE
-    ctx.fillRect(ammoX, ammoY, 15, 15)
-    ctx.fillStyle = '#fff'
-    ctx.fillText(`导弹 ${this.player.missileAmmo}`, ammoX + 20, ammoY + 12)
-    
-    // 网兜
-    ctx.fillStyle = CONSTS.COLORS.NET
-    ctx.beginPath()
-    ctx.arc(ammoX + 7, ammoY + 30, 7, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = '#fff'
-    ctx.fillText(`网兜 ${this.player.netAmmo}`, ammoX + 20, ammoY + 34)
+    // 左下：雷达
+    this._renderRadar(ctx, hud.radar.x, hud.radar.y, hud.radar.size)
 
     // 武器冷却指示
     this._renderWeaponCooldowns(ctx, w, h)
@@ -996,13 +1025,30 @@ class Game {
     // 战斗提示
     this._renderToasts(ctx, w, h)
 
-    // 按钮
+    // 摇杆 / 按钮 / 特技列表
     this._renderButtons(ctx, w, h)
   }
 
-  _renderRadar(ctx, cx, cy) {
-    const size = 100
-    const radius = size / 2
+  // 顶部小按钮（暂停 / 视角）
+  _drawChip(ctx, rect, text) {
+    ctx.save()
+    ctx.fillStyle = 'rgba(30,48,78,0.88)'
+    roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 6)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(120,170,230,0.5)'
+    ctx.lineWidth = 1
+    roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 6)
+    ctx.stroke()
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 13px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, rect.x + rect.w / 2, rect.y + rect.h / 2)
+    ctx.restore()
+  }
+
+  _renderRadar(ctx, cx, cy, size) {
+    const radius = (size || 100) / 2
     
     ctx.save()
     ctx.translate(cx, cy)
@@ -1089,14 +1135,20 @@ class Game {
     const player = this.player
     if (!player) return
 
-    // 机炮冷却（射击按钮位置）
+    // 机炮冷却（圆形射击按钮上叠一层暗色扇形）
     const fireBtn = this.input.uiLayout.fire
-    if (fireBtn) {
-      const cooldownPercent = 1 - player.spitCooldown / CONSTS.SPIT.COOLDOWN
-      if (player.spitCooldown > 0) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.fillRect(fireBtn.x, fireBtn.y, fireBtn.w, fireBtn.h * (1 - cooldownPercent))
-      }
+    if (fireBtn && player.spitCooldown > 0) {
+      const percent = Math.max(0, Math.min(1, player.spitCooldown / CONSTS.SPIT.COOLDOWN))
+      const cx = fireBtn.x + fireBtn.w / 2
+      const cy = fireBtn.y + fireBtn.h / 2
+      const r = fireBtn.w / 2
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+      ctx.fillRect(cx - r, cy - r, r * 2, r * 2 * percent)
+      ctx.restore()
     }
   }
 
@@ -1127,70 +1179,154 @@ class Game {
   _renderButtons(ctx, w, h) {
     const layout = this.input.uiLayout
     if (!layout) return
+    const player = this.player
 
-    // 机炮按钮
-    this._drawButton(ctx, layout.fire, '射击', '#E74C3C', this.input.buttons.fire)
-    
-    // 导弹按钮
-    const missileReady = this.player.canFireMissile()
-    this._drawButton(ctx, layout.missile, '导弹', missileReady ? CONSTS.COLORS.MISSILE : '#555', missileReady)
-    
-    // 网兜按钮
-    const netReady = this.player.canFireNet()
-    this._drawButton(ctx, layout.net, '网兜', netReady ? CONSTS.COLORS.NET : '#555', netReady)
-    
-    // 加速按钮
-    this._drawButton(ctx, layout.boost, '加速', '#F39C12', this.input.buttons.boost)
+    // 射（机炮）：大蓝圆
+    this._drawCircleButton(ctx, layout.fire, '射', '#2E86DE', this.input.buttons.fire, null)
 
-    // 特技按钮
+    // 风（加速）：青色圆
+    this._drawCircleButton(ctx, layout.boost, '风', '#17A2B8', this.input.buttons.boost, null)
+
+    // 导弹 / 网兜：小圆 + 弹药角标
+    const missileReady = player.canFireMissile()
+    this._drawCircleButton(ctx, layout.missile, '弹', missileReady ? '#C0392B' : '#555', missileReady, player.missileAmmo)
+
+    const netReady = player.canFireNet()
+    this._drawCircleButton(ctx, layout.net, '网', netReady ? '#27AE60' : '#555', netReady, player.netAmmo)
+
+    // 特技：小圆 + 冷却角标
     const stuntType = this.input.selectedStunt
     const stuntDef = STUNT_DEFS[stuntType]
-    const stuntCd = this.player.stunt.getStuntCooldown(stuntType)
-    const stuntReady = stuntCd <= 0 && this.player.wind >= stuntDef.cost
-    this._drawButton(ctx, layout.stunt, stuntDef.name, stuntReady ? '#9B59B6' : '#555', stuntReady)
-    
-    // 特技冷却指示
-    if (stuntCd > 0) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
-      ctx.fillRect(layout.stunt.x, layout.stunt.y, layout.stunt.w, layout.stunt.h * (stuntCd / stuntDef.cooldown))
-      ctx.fillStyle = '#fff'
-      ctx.font = 'bold 12px sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText(stuntCd.toFixed(1), layout.stunt.x + layout.stunt.w / 2, layout.stunt.y + layout.stunt.h / 2)
-    }
+    const stuntCd = player.stunt.getStuntCooldown(stuntType)
+    const stuntReady = stuntCd <= 0 && player.wind >= stuntDef.cost
+    this._drawCircleButton(ctx, layout.stunt, '技', stuntReady ? '#B03A2E' : '#555', stuntReady,
+                           stuntCd > 0 ? Math.ceil(stuntCd) : null)
 
-    // 特技选择按钮
-    this._drawButton(ctx, layout.stuntSelect, '切换', '#34495E', false)
-    ctx.fillStyle = '#fff'
-    ctx.font = '10px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText(stuntDef.name, layout.stuntSelect.x + layout.stuntSelect.w / 2, layout.stuntSelect.y + layout.stuntSelect.h + 15)
+    // 右上竖排特技列表
+    this._renderStuntList(ctx)
+
+    // 左侧摇杆
+    this._renderJoystick(ctx)
   }
 
-  _drawButton(ctx, rect, label, color, active) {
+  // 右上竖排特技列表（点选切换，显示能量消耗）
+  _renderStuntList(ctx) {
+    const list = this.input.uiLayout.stuntList
+    if (!list || !this.player) return
+    const player = this.player
+
+    for (const rect of list) {
+      const def = STUNT_DEFS[rect.stuntType]
+      if (!def) continue
+      const selected = this.input.selectedStunt === rect.stuntType
+      const cd = player.stunt.getStuntCooldown(rect.stuntType)
+      const usable = cd <= 0 && player.wind >= def.cost
+
+      ctx.fillStyle = selected ? 'rgba(46,86,140,0.92)' : 'rgba(24,38,58,0.72)'
+      roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 5)
+      ctx.fill()
+
+      ctx.strokeStyle = selected ? '#4A90D9' : 'rgba(120,160,210,0.35)'
+      ctx.lineWidth = selected ? 2 : 1
+      roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 5)
+      ctx.stroke()
+
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'left'
+      ctx.fillStyle = usable ? '#fff' : 'rgba(200,200,200,0.55)'
+      ctx.font = 'bold 11px sans-serif'
+      ctx.fillText(def.name, rect.x + 7, rect.y + rect.h / 2)
+
+      ctx.textAlign = 'right'
+      ctx.fillStyle = cd > 0 ? '#E67E22' : '#7FD4A8'
+      ctx.font = 'bold 11px sans-serif'
+      ctx.fillText(cd > 0 ? cd.toFixed(1) + 's' : String(def.cost), rect.x + rect.w - 7, rect.y + rect.h / 2)
+    }
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+  }
+
+  // 左侧摇杆（固定基座 + 跟随手指的摇杆头）
+  _renderJoystick(ctx) {
+    const layout = this.input.uiLayout
+    const base = layout && layout.joystick && layout.joystick.base
+    if (!base) return
+
+    const cx = base.x + base.w / 2
+    const cy = base.y + base.h / 2
+    const r = base.w / 2
+    const js = this.input.joystick
+
     ctx.save()
-    
-    // 背景
-    ctx.globalAlpha = active ? 0.9 : 0.7
-    ctx.fillStyle = color
+    ctx.fillStyle = 'rgba(18,22,30,0.55)'
     ctx.beginPath()
-    ctx.arc(rect.x + rect.w / 2, rect.y + rect.h / 2, rect.w / 2, 0, Math.PI * 2)
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.fill()
-    
-    // 边框
-    ctx.strokeStyle = active ? '#fff' : '#888'
-    ctx.lineWidth = active ? 3 : 2
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.stroke()
-    
-    // 标签
-    ctx.globalAlpha = 1
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 12px sans-serif'
+
+    const knobX = cx + js.dx * (r * 0.55)
+    const knobY = cy + js.dy * (r * 0.55)
+    ctx.fillStyle = js.active ? 'rgba(46,204,113,0.9)' : 'rgba(150,160,170,0.85)'
+    ctx.beginPath()
+    ctx.arc(knobX, knobY, r * 0.34, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2)
-    
+    ctx.fillText('前进方向', cx, base.y + base.h + 12)
     ctx.restore()
+  }
+
+  _drawCircleButton(ctx, rect, label, color, active, badge) {
+    if (!rect) return
+    const cx = rect.x + rect.w / 2
+    const cy = rect.y + rect.h / 2
+    const r = rect.w / 2
+
+    ctx.save()
+    ctx.globalAlpha = active ? 0.95 : 0.8
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.35)'
+    ctx.lineWidth = active ? 3 : 2
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${Math.max(10, Math.round(r * 0.62))}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, cx, cy)
+
+    if (badge !== null && badge !== undefined) {
+      const br = Math.max(7, r * 0.42)
+      const bx = cx + r * 0.72
+      const by = cy + r * 0.72
+      ctx.fillStyle = 'rgba(10,14,20,0.85)'
+      ctx.beginPath()
+      ctx.arc(bx, by, br, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#FFD700'
+      ctx.font = `bold ${Math.max(8, Math.round(br * 0.9))}px sans-serif`
+      ctx.fillText(String(badge), bx, by + 1)
+    }
+    ctx.restore()
+  }
+
+  // 切换视角缩放
+  toggleZoom() {
+    this.zoom = this.zoom > 1 ? 1 : 2
   }
 
   pause() {

@@ -41,51 +41,135 @@ function drawPolygon(ctx, points) {
   ctx.stroke()
 }
 
-// ============ 第1章：书桌战场 ============
+// ============ 第1章：书桌战场（俯视教室：地砖 / 课桌椅 / 吊扇 / 白板）============
 const CLASSROOM = {
   id: 'classroom',
   name: '书桌战场',
-  bg: '#241c15',
-  border: '#7a5a32',
-  grid: '#3a2c1c',
-  draw(ctx, radius) {
-    if (!this._papers) {
+  bg: '#9aa1a1',
+  border: '#7f8b82',
+  grid: '#8f9697',
+  draw(ctx, radius, elapsed) {
+    if (!this._desks) {
       const rnd = makeRandom(20240101)
-      this._papers = []
-      for (let i = 0; i < 7; i++) {
-        const angle = rnd() * Math.PI * 2
-        const dist = 90 + rnd() * (radius * 0.75)
-        this._papers.push({
-          x: Math.cos(angle) * dist,
-          y: Math.sin(angle) * dist,
-          w: 70 + rnd() * 70,
-          h: 50 + rnd() * 40,
-          rot: (rnd() - 0.5) * 0.8
+      // 课桌按两列三排整齐摆放，全部朝向白板方向
+      this._desks = []
+      const deskCols = [-215, 215]
+      const deskRows = [-170, -10, 150]
+      for (let r = 0; r < deskRows.length; r++) {
+        for (let c = 0; c < deskCols.length; c++) {
+          this._desks.push({
+            x: deskCols[c],
+            y: deskRows[r],
+            rot: -0.06,
+            w: 128 + rnd() * 34,
+            h: 44 + rnd() * 12,
+            seed: rnd()
+          })
+        }
+      }
+      this._posters = []
+      for (let i = 0; i < 4; i++) {
+        const a = rnd() * Math.PI * 2
+        const d = radius * (0.5 + rnd() * 0.38)
+        this._posters.push({
+          x: Math.cos(a) * d,
+          y: Math.sin(a) * d,
+          rot: (rnd() - 0.5) * 0.5,
+          w: 54 + rnd() * 18,
+          h: 66 + rnd() * 22
         })
       }
     }
 
-    // 木纹横线
-    ctx.strokeStyle = '#382a1a'
-    ctx.lineWidth = 2
-    for (let y = -radius; y <= radius; y += 46) {
+    // 地砖网格
+    const tile = 62
+    ctx.strokeStyle = 'rgba(118,126,126,0.55)'
+    ctx.lineWidth = 1
+    for (let x = -radius; x <= radius; x += tile) {
+      ctx.beginPath()
+      ctx.moveTo(x, -radius)
+      ctx.lineTo(x, radius)
+      ctx.stroke()
+    }
+    for (let y = -radius; y <= radius; y += tile) {
       ctx.beginPath()
       ctx.moveTo(-radius, y)
-      ctx.lineTo(radius, y + 6)
+      ctx.lineTo(radius, y)
+      ctx.stroke()
+    }
+    // 砖面高光
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+    for (let y = -radius; y <= radius; y += tile) {
+      ctx.beginPath()
+      ctx.moveTo(-radius, y + 1)
+      ctx.lineTo(radius, y + 1)
       ctx.stroke()
     }
 
-    // 纸张/草稿本
-    for (const p of this._papers) {
+    // 白板（贴着战场边缘）
+    ctx.save()
+    ctx.translate(-radius * 0.5, -radius * 0.66)
+    ctx.rotate(-0.06)
+    ctx.fillStyle = '#dfe6e0'
+    ctx.fillRect(-150, -46, 300, 92)
+    ctx.strokeStyle = '#3b6e91'
+    ctx.lineWidth = 5
+    ctx.strokeRect(-150, -46, 300, 92)
+    ctx.strokeStyle = 'rgba(90,120,110,0.35)'
+    ctx.lineWidth = 2
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath()
+      ctx.moveTo(-130, -30 + i * 15)
+      ctx.lineTo(110 - (i % 2) * 46, -30 + i * 15)
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    // 课桌椅（绿色铁架 + 木色桌面）
+    for (const desk of this._desks) {
+      ctx.save()
+      ctx.translate(desk.x, desk.y)
+      ctx.rotate(desk.rot)
+
+      // 椅子
+      ctx.fillStyle = 'rgba(38,92,66,0.85)'
+      ctx.fillRect(-22, desk.h / 2 + 10, 44, 34)
+      ctx.fillStyle = 'rgba(60,120,86,0.85)'
+      ctx.fillRect(-18, desk.h / 2 + 14, 36, 26)
+
+      // 桌架
+      ctx.fillStyle = 'rgba(34,84,60,0.9)'
+      ctx.fillRect(-desk.w / 2, -desk.h / 2, desk.w, desk.h)
+      // 桌面
+      ctx.fillStyle = desk.seed > 0.5 ? '#c8a474' : '#bb9768'
+      ctx.fillRect(-desk.w / 2 + 7, -desk.h / 2 + 7, desk.w - 14, desk.h - 14)
+      // 木纹
+      ctx.strokeStyle = 'rgba(120,88,52,0.35)'
+      ctx.lineWidth = 1
+      for (let i = 1; i < 4; i++) {
+        const yy = -desk.h / 2 + (desk.h / 4) * i
+        ctx.beginPath()
+        ctx.moveTo(-desk.w / 2 + 10, yy)
+        ctx.lineTo(desk.w / 2 - 10, yy)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    // 墙上的纸张 / 海报
+    for (const p of this._posters) {
       ctx.save()
       ctx.translate(p.x, p.y)
       ctx.rotate(p.rot)
-      ctx.fillStyle = 'rgba(226,214,188,0.10)'
+      ctx.fillStyle = 'rgba(238,240,232,0.9)'
       ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h)
-      ctx.strokeStyle = 'rgba(226,214,188,0.18)'
+      ctx.strokeStyle = 'rgba(60,110,150,0.7)'
+      ctx.lineWidth = 2
+      ctx.strokeRect(-p.w / 2, -p.h / 2, p.w, p.h)
+      ctx.strokeStyle = 'rgba(110,120,120,0.35)'
       ctx.lineWidth = 1
-      for (let i = 1; i < 4; i++) {
-        const yy = -p.h / 2 + (p.h / 4) * i
+      for (let i = 0; i < 5; i++) {
+        const yy = -p.h / 2 + 12 + i * 10
         ctx.beginPath()
         ctx.moveTo(-p.w / 2 + 6, yy)
         ctx.lineTo(p.w / 2 - 6, yy)
@@ -94,18 +178,64 @@ const CLASSROOM = {
       ctx.restore()
     }
 
-    // 铅笔（斜放）
-    ctx.strokeStyle = 'rgba(240,200,90,0.35)'
+    // 垃圾桶
+    ctx.save()
+    ctx.translate(-radius * 0.72, radius * 0.18)
+    ctx.fillStyle = 'rgba(120,126,124,0.9)'
+    ctx.beginPath()
+    ctx.arc(0, 0, 17, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(60,64,62,0.6)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, 0, 11, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+
+    // 中央吊扇（缓慢旋转）
+    ctx.save()
+    const spin = (elapsed || 0) * 0.9
+    ctx.fillStyle = 'rgba(0,0,0,0.10)'
+    ctx.beginPath()
+    ctx.arc(0, 0, 86, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.rotate(spin)
+    for (let i = 0; i < 4; i++) {
+      ctx.save()
+      ctx.rotate(i * Math.PI / 2)
+      ctx.translate(58, 0)
+      ctx.scale(1, 0.26)
+      ctx.fillStyle = 'rgba(74,78,82,0.55)'
+      ctx.beginPath()
+      ctx.arc(0, 0, 54, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+    ctx.restore()
+
+    // 吊扇中心轴
+    ctx.fillStyle = 'rgba(56,60,64,0.9)'
+    ctx.beginPath()
+    ctx.arc(0, 0, 13, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(150,156,160,0.7)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, 0, 13, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // 掉在地上的铅笔
+    ctx.strokeStyle = 'rgba(240,200,90,0.55)'
     ctx.lineWidth = 5
     ctx.beginPath()
-    ctx.moveTo(-radius * 0.7, radius * 0.55)
-    ctx.lineTo(-radius * 0.35, radius * 0.25)
+    ctx.moveTo(-radius * 0.6, radius * 0.62)
+    ctx.lineTo(-radius * 0.32, radius * 0.5)
     ctx.stroke()
-    ctx.strokeStyle = 'rgba(230,120,90,0.5)'
+    ctx.strokeStyle = 'rgba(230,120,90,0.75)'
     ctx.lineWidth = 3
     ctx.beginPath()
-    ctx.moveTo(-radius * 0.72, radius * 0.57)
-    ctx.lineTo(-radius * 0.68, radius * 0.52)
+    ctx.moveTo(-radius * 0.62, radius * 0.63)
+    ctx.lineTo(-radius * 0.58, radius * 0.61)
     ctx.stroke()
   }
 }
