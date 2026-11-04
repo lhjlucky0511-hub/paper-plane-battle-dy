@@ -64,7 +64,8 @@ class InputManager {
     }
 
     // 键盘支持（开发调试用）
-    if (typeof window !== 'undefined') {
+    // 抖音小游戏里 window 存在但 window.addEventListener 不是函数！必须双重检查
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('keydown', (e) => this._onKeyDown(e))
       window.addEventListener('keyup', (e) => this._onKeyUp(e))
     }

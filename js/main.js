@@ -50,16 +50,17 @@ class MainApp {
 
   init() {
     // 抖音小游戏获取 canvas
+    // 优先使用 game.js 顶部创建的全局上屏画布（必须是第一个 tt.createCanvas() 调用）
     if (typeof tt !== 'undefined') {
-      this.canvas = tt.createCanvas()
-      this.ctx = this.canvas.getContext('2d')
-      // 抖音小游戏 canvas 自动适配屏幕，不需要手动 scale
-      // 但需要确保像素比正确
-      if (this.canvas.width && this.screenInfo.pixelRatio > 1) {
-        this.ctx.scale(this.screenInfo.pixelRatio, this.screenInfo.pixelRatio)
+      if (globalThis.__rawCanvas && globalThis.__rawCtx) {
+        this.canvas = globalThis.__rawCanvas
+        this.ctx = globalThis.__rawCtx
+      } else {
+        // 兜底（可能是离屏画布）
+        this.canvas = tt.createCanvas()
+        this.ctx = this.canvas.getContext('2d')
       }
     } else {
-      // 开发调试用（mock 环境）
       this.canvas = null
       this.ctx = null
     }
@@ -72,22 +73,29 @@ class MainApp {
     console.log('[init] canvas:', this.screenInfo.width, 'x', this.screenInfo.height,
                 'pixelRatio:', this.screenInfo.pixelRatio)
 
-    // 初始化输入管理器
-    this.input = new InputManager()
+    try {
+      this.input = new InputManager()
+      this.game = new Game(this.canvas, this.ctx, this.input)
+      this.game.init(this.screenInfo.width, this.screenInfo.height)
+      
+      this.game.onGameEnd = (stats) => this._onGameEnd(stats)
+      this.game.onBackToMenu = () => this.menuState = 'main'
 
-    // 初始化游戏
-    this.game = new Game(this.canvas, this.ctx, this.input)
-    this.game.init(this.screenInfo.width, this.screenInfo.height)
-    
-    this.game.onGameEnd = (stats) => this._onGameEnd(stats)
-    this.game.onBackToMenu = () => this.menuState = 'main'
+      this._setupMenuInput()
 
-    // 设置屏幕点击事件（用于UI）
-    this._setupMenuInput()
-
-    // 开始主循环
-    this._lastTime = Date.now()
-    this._loop()
+      // 开始主循环
+      this._lastTime = Date.now()
+      this._loop()
+    } catch(e) {
+      console.error('[init] FAILED:', e.message)
+      try {
+        this.ctx.fillStyle = '#FF0000'
+        this.ctx.fillRect(0, 0, this.screenInfo.width, this.screenInfo.height)
+        this.ctx.fillStyle = '#FFFFFF'
+        this.ctx.font = '14px sans-serif'
+        this.ctx.fillText('ERROR: ' + e.message, 20, 50)
+      } catch(e2) {}
+    }
   }
 
   _setupMenuInput() {
@@ -308,22 +316,28 @@ class MainApp {
   }
 
   _loop() {
-    const now = Date.now()
-    const dt = now - this._lastTime
-    this._lastTime = now
+    try {
+      const now = Date.now()
+      const dt = now - this._lastTime
+      this._lastTime = now
 
-    if (this.game.state === GAME_STATE.PLAYING) {
-      this.game.update(now)
-    }
+      if (this.game.state === GAME_STATE.PLAYING) {
+        this.game.update(now)
+      }
 
-    this._render()
+      this._render()
 
-    // 继续循环
-    if (typeof requestAnimationFrame !== 'undefined') {
-      requestAnimationFrame(() => this._loop())
-    } else {
-      // 抖音小游戏用 setTimeout
-      setTimeout(() => this._loop(), 16)
+      // 继续循环
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => this._loop())
+      } else {
+        // 抖音小游戏用 setTimeout
+        setTimeout(() => this._loop(), 16)
+      }
+    } catch(e) {
+      console.error('[LOOP ERROR]', e.message, e.stack)
+      // 出错后尝试继续循环，避免卡死
+      setTimeout(() => this._loop(), 100)
     }
   }
 
