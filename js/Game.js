@@ -30,6 +30,14 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
+// 教室地图 3D 透视相机（世界坐标 -> 屏幕坐标）
+const CAM3D = {
+  HEIGHT: 600,        // 相机离地高度
+  DIST: 600,          // 相机位于玩家后方的距离
+  TILT: Math.PI / 4,  // 俯视角度
+  FOCAL: 360          // 焦距（像素）
+}
+
 // 游戏状态
 const GAME_STATE = {
   MENU: 'menu',
@@ -769,53 +777,226 @@ class Game {
     ctx.fillStyle = CONSTS.COLORS.BACKGROUND
     ctx.fillRect(0, 0, w, h)
 
-    // 计算相机（跟随玩家）
-    let camX = 0
-    let camY = 0
-    if (this.player && this.player.isAlive) {
-      camX = this.player.x
-      camY = this.player.y
-    }
-
-    // 相机变换
-    ctx.save()
-    ctx.translate(w / 2, h / 2)
-    ctx.scale(this.viewScale * this.zoom, this.viewScale * this.zoom)
-    ctx.translate(-camX, -camY)
-
-    // 渲染战场
-    this._renderArena(ctx)
-
-    // 渲染道具场
-    this._renderLootField(ctx)
-
-    // 渲染战役能量环
-    if (this.gameMode === 'campaign' && this.campaign.objective && 
-        this.campaign.objective.rings) {
-      this._renderCampaignRings(ctx)
-    }
-
-    // 渲染投射物
-    for (const spit of this.spits) spit.render(ctx, spit.x, spit.y)
-    for (const missile of this.missiles) missile.render(ctx, missile.x, missile.y)
-    for (const net of this.nets) net.render(ctx, net.x, net.y)
-
-    // 渲染飞机
-    for (const plane of this.planes) {
-      if (plane.isAlive || plane.isCrashing) {
-        plane.render(ctx, plane.x, plane.y)
-        plane.renderHUD(ctx, plane.x, plane.y)
+    if (this._is3D()) {
+      // 教室地图：透视相机 + 3D 场景
+      this._render3DScene(ctx, w, h)
+    } else {
+      // 计算相机（跟随玩家）
+      let camX = 0
+      let camY = 0
+      if (this.player && this.player.isAlive) {
+        camX = this.player.x
+        camY = this.player.y
       }
+
+      // 相机变换
+      ctx.save()
+      ctx.translate(w / 2, h / 2)
+      ctx.scale(this.viewScale * this.zoom, this.viewScale * this.zoom)
+      ctx.translate(-camX, -camY)
+
+      // 渲染战场
+      this._renderArena(ctx)
+
+      // 渲染道具场
+      this._renderLootField(ctx)
+
+      // 渲染战役能量环
+      if (this.gameMode === 'campaign' && this.campaign.objective &&
+          this.campaign.objective.rings) {
+        this._renderCampaignRings(ctx)
+      }
+
+      // 渲染投射物
+      for (const spit of this.spits) spit.render(ctx, spit.x, spit.y)
+      for (const missile of this.missiles) missile.render(ctx, missile.x, missile.y)
+      for (const net of this.nets) net.render(ctx, net.x, net.y)
+
+      // 渲染飞机
+      for (const plane of this.planes) {
+        if (plane.isAlive || plane.isCrashing) {
+          plane.render(ctx, plane.x, plane.y)
+          plane.renderHUD(ctx, plane.x, plane.y)
+        }
+      }
+
+      // 渲染粒子
+      this.particles.render(ctx)
+
+      ctx.restore()
     }
-
-    // 渲染粒子
-    this.particles.render(ctx)
-
-    ctx.restore()
 
     // 渲染HUD（屏幕坐标）
     if (this.state === GAME_STATE.PLAYING) {
       this._renderHUD(ctx)
+    }
+  }
+
+  // ============ 3D 透视场景（教室地图）============
+
+  _is3D() {
+    return typeof getMapTheme(this.mapId).draw3D === 'function'
+  }
+
+  _setup3D() {
+    const zoomed = this.zoom > 1
+    const px = this.player && this.player.isAlive ? this.player.x : 0
+    const py = this.player && this.player.isAlive ? this.player.y : 0
+    // 放大视角时相机轻微跟随玩家，避免玩家飞出画面
+    const follow = zoomed ? 0.5 : 0
+    this._cam3d = {
+      cx: this.screenWidth / 2,
+      cy: this.screenHeight / 2,
+      camX: px * follow,
+      camY: py * follow,
+      height: CAM3D.HEIGHT,
+      dist: CAM3D.DIST,
+      sin: Math.sin(CAM3D.TILT),
+      cos: Math.cos(CAM3D.TILT),
+      focal: CAM3D.FOCAL * (zoomed ? 1.45 : 1)
+    }
+  }
+
+  // 世界坐标 (x, y, z) 投影到屏幕，返回 { x, y, s }（s 为该处缩放）
+  _project(x, y, z) {
+    const c = this._cam3d
+    const dx = x - c.camX
+    const dy = y - c.camY + c.dist
+    const dz = z - c.height
+    const fwd = dy * c.cos - dz * c.sin
+    const up = dy * c.sin + dz * c.cos
+    const s = c.focal / Math.max(1, fwd)
+    return { x: c.cx + dx * s, y: c.cy - up * s, s }
+  }
+
+  _render3DScene(ctx, w, h) {
+    this._setup3D()
+    const theme = getMapTheme(this.mapId)
+
+    theme.draw3D(ctx, {
+      project: (x, y, z) => this._project(x, y, z),
+      width: w,
+      height: h,
+      elapsed: this.elapsed
+    })
+
+    // 道具
+    this._renderLootField(ctx, true)
+
+    // 战役能量环
+    if (this.gameMode === 'campaign' && this.campaign.objective &&
+        this.campaign.objective.rings) {
+      this._renderCampaignRings3D(ctx)
+    }
+
+    // 投射物
+    for (const spit of this.spits) {
+      this._drawProjected(ctx, spit.x, spit.y, 24, c => spit.render(c, 0, 0))
+    }
+    for (const missile of this.missiles) {
+      this._drawProjected(ctx, missile.x, missile.y, 24, c => missile.render(c, 0, 0))
+    }
+    for (const net of this.nets) {
+      this._drawProjected(ctx, net.x, net.y, 24, c => net.render(c, 0, 0))
+    }
+
+    // 飞机（地面投影 + 空中 billboard）
+    for (const plane of this.planes) {
+      if (!plane.isAlive && !plane.isCrashing) continue
+
+      const shadow = this._project(plane.x, plane.y, 0)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.26)'
+      ctx.beginPath()
+      ctx.ellipse(shadow.x, shadow.y, 22 * shadow.s, 13 * shadow.s, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      this._drawProjected(ctx, plane.x, plane.y, 46, c => plane.render(c, 0, 0))
+      if (plane.isAI) this._renderPlaneTag3D(ctx, plane)
+    }
+
+    // 粒子
+    this._renderParticles3D(ctx)
+  }
+
+  // 把实体按投影位置绘制到屏幕（billboard）
+  _drawProjected(ctx, x, y, z, draw) {
+    const p = this._project(x, y, z)
+    if (p.s < 0.05) return
+    if (p.x < -240 || p.x > this.screenWidth + 240 ||
+        p.y < -240 || p.y > this.screenHeight + 240) return
+    ctx.save()
+    ctx.translate(p.x, p.y)
+    ctx.scale(p.s, p.s)
+    draw(ctx)
+    ctx.restore()
+  }
+
+  _renderPlaneTag3D(ctx, plane) {
+    const p = this._project(plane.x, plane.y, 46)
+    const bw = 38
+    const bh = 5
+    const bx = p.x - bw / 2
+    const by = p.y - 30
+    if (by < 0 || bx < 0 || bx + bw > this.screenWidth) return
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
+    ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2)
+    ctx.fillStyle = '#333'
+    ctx.fillRect(bx, by, bw, bh)
+
+    const ratio = Math.max(0, Math.min(1, plane.health / plane.maxHealth))
+    ctx.fillStyle = ratio > 0.5 ? '#2ECC71' : ratio > 0.25 ? '#F39C12' : '#E74C3C'
+    ctx.fillRect(bx, by, bw * ratio, bh)
+
+    ctx.fillStyle = '#fff'
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillText(plane.displayName, p.x, by - 3)
+  }
+
+  _renderParticles3D(ctx) {
+    for (const p of this.particles.particles) {
+      const q = this._project(p.x, p.y, 30)
+      if (q.s < 0.05) continue
+      ctx.globalAlpha = p.life / p.maxLife
+      ctx.fillStyle = p.color
+      ctx.beginPath()
+      ctx.arc(q.x, q.y, Math.max(1, p.size * q.s), 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  }
+
+  _renderCampaignRings3D(ctx) {
+    const rings = this.campaign.objective.rings
+    for (const ring of rings) {
+      const outer = []
+      const inner = []
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2
+        outer.push(this._project(ring.x + Math.cos(a) * ring.radius, ring.y + Math.sin(a) * ring.radius, 0))
+        inner.push(this._project(ring.x + Math.cos(a) * ring.radius * 0.6, ring.y + Math.sin(a) * ring.radius * 0.6, 0))
+      }
+
+      ctx.beginPath()
+      ctx.moveTo(outer[0].x, outer[0].y)
+      for (let i = 1; i < outer.length; i++) ctx.lineTo(outer[i].x, outer[i].y)
+      ctx.closePath()
+      ctx.strokeStyle = ring.passed ? '#2ECC71' : '#F1C40F'
+      ctx.globalAlpha = ring.passed ? 0.3 : 0.8
+      ctx.lineWidth = 3
+      ctx.stroke()
+
+      if (!ring.passed) {
+        ctx.beginPath()
+        ctx.moveTo(inner[0].x, inner[0].y)
+        for (let i = 1; i < inner.length; i++) ctx.lineTo(inner[i].x, inner[i].y)
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(241, 196, 15, 0.30)'
+        ctx.fill()
+      }
+      ctx.globalAlpha = 1
     }
   }
 
@@ -873,7 +1054,7 @@ class Game {
     ctx.stroke()
   }
 
-  _renderLootField(ctx) {
+  _renderLootField(ctx, use3D) {
     const field = this.lootField
     if (!field.built) return
 
@@ -881,8 +1062,18 @@ class Game {
       if (!point.available) continue
 
       const bob = Math.sin(this.elapsed * 2 + point.bobOffset) * 4
+      let px = point.x
+      let py = point.y + bob
+      let ps = 1
+      if (use3D) {
+        const p = this._project(px, py, 18)
+        px = p.x
+        py = p.y
+        ps = p.s
+      }
       ctx.save()
-      ctx.translate(point.x, point.y + bob)
+      ctx.translate(px, py)
+      ctx.scale(ps, ps)
       ctx.rotate(point.rotation)
 
       const color = LOOT_COLORS[point.type] || '#FFD700'
