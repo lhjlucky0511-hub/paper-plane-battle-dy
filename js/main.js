@@ -229,7 +229,8 @@ class MainApp {
     }
 
     if (this.menuState === 'main') {
-      L.main = grid(4, 2, Math.min(220, w * 0.26), Math.min(56, h * 0.15), 22, 16, h * 0.4)
+      // 标题放到屏幕正中，按钮放在标题下方
+      L.main = grid(4, 2, Math.min(220, w * 0.26), Math.min(56, h * 0.15), 22, 16, h * 0.62)
     } else if (this.menuState === 'aiSelect') {
       L.ai = row(3, Math.min(180, w * 0.21), 52, 16, h * 0.46)
       L.back = row(1, 150, 42, 0, h - 64)[0]
@@ -545,7 +546,18 @@ class MainApp {
     const L = this._menuLayout()
 
     if (this.menuState === 'main') {
-      this._drawPageTitle(ctx, w, '纸飞机大战', 'Paper Plane Battle', h * 0.17)
+      // 主标题在屏幕正中，副标题紧贴下方
+      ctx.save()
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold ${Math.round(h * 0.08)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('纸飞机大战', w / 2, h * 0.48)
+      ctx.fillStyle = '#8a8a9a'
+      ctx.font = `${Math.round(h * 0.032)}px sans-serif`
+      ctx.fillText('Paper Plane Battle', w / 2, h * 0.56)
+      ctx.restore()
+
       const labels = ['对战模式', '战役模式', '联机模式', '操作说明']
       const colors = ['#4A90D9', '#E74C3C', '#9B59B6', '#27AE60']
       for (let i = 0; i < 4; i++) {
