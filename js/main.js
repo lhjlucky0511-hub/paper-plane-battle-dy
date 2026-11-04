@@ -1,6 +1,26 @@
-// 抖音小游戏主入口
+// 抖音小游戏主入口 - 纸飞机大战
 const { Game, GAME_STATE } = require('./Game')
 const InputManager = require('./InputManager')
+
+// 兼容版 roundRect 实现
+function roundRect(ctx, x, y, w, h, r) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r)
+    return
+  }
+  r = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+}
 
 // 获取屏幕尺寸
 function getScreenInfo() {
@@ -32,18 +52,16 @@ class MainApp {
     // 抖音小游戏获取 canvas
     if (typeof tt !== 'undefined') {
       this.canvas = tt.createCanvas()
-    } else {
-      // 开发调试用
-      this.canvas = {
-        width: this.screenInfo.width,
-        height: this.screenInfo.height
-      }
-      const MockCanvas = require('./mock/canvas')
-      this.ctx = new MockCanvas()
-    }
-    
-    if (!this.ctx && this.canvas.getContext) {
       this.ctx = this.canvas.getContext('2d')
+      // 抖音小游戏 canvas 自动适配屏幕，不需要手动 scale
+      // 但需要确保像素比正确
+      if (this.canvas.width && this.screenInfo.pixelRatio > 1) {
+        this.ctx.scale(this.screenInfo.pixelRatio, this.screenInfo.pixelRatio)
+      }
+    } else {
+      // 开发调试用（mock 环境）
+      this.canvas = null
+      this.ctx = null
     }
     
     if (!this.ctx) {
@@ -51,12 +69,8 @@ class MainApp {
       return
     }
 
-    // 设置 canvas 尺寸
-    if (this.canvas.width !== undefined) {
-      this.canvas.width = this.screenInfo.width * this.screenInfo.pixelRatio
-      this.canvas.height = this.screenInfo.height * this.screenInfo.pixelRatio
-      this.ctx.scale(this.screenInfo.pixelRatio, this.screenInfo.pixelRatio)
-    }
+    console.log('[init] canvas:', this.screenInfo.width, 'x', this.screenInfo.height,
+                'pixelRatio:', this.screenInfo.pixelRatio)
 
     // 初始化输入管理器
     this.input = new InputManager()
@@ -422,8 +436,7 @@ class MainApp {
       // 按钮背景
       ctx.fillStyle = !unlocked ? '#444' : completed ? '#2ECC71' : level.isBoss ? '#E74C3C' : '#4A90D9'
       ctx.globalAlpha = unlocked ? 1 : 0.5
-      ctx.beginPath()
-      ctx.roundRect(bx, by, btnW, btnH, 8)
+      roundRect(ctx, bx, by, btnW, btnH, 8)
       ctx.fill()
       ctx.globalAlpha = 1
 
@@ -500,8 +513,7 @@ class MainApp {
 
     // 按钮背景
     ctx.fillStyle = color
-    ctx.beginPath()
-    ctx.roundRect(x, y, btnW, btnH, 10)
+    roundRect(ctx, x, y, btnW, btnH, 10)
     ctx.fill()
 
     // 按钮文字
@@ -551,8 +563,7 @@ class MainApp {
     const x = (w - btnW) / 2
     const y = h * 0.8
     ctx.fillStyle = '#7F8C8D'
-    ctx.beginPath()
-    ctx.roundRect(x, y, btnW, btnH, 10)
+    roundRect(ctx, x, y, btnW, btnH, 10)
     ctx.fill()
     ctx.fillStyle = '#fff'
     ctx.font = 'bold 20px sans-serif'
