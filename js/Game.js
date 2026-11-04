@@ -138,9 +138,24 @@ class Game {
     // 圆形按钮：rect 即圆的外接矩形（_drawCircleButton 以 w/2 为半径）
     const circle = (cx, cy, r) => ({ x: cx - r, y: cy - r, w: r * 2, h: r * 2, r: Math.round(r) })
 
-    const fireR = Math.round(30 * u)
-    const boostR = Math.round(27 * u)
-    const smallR = Math.round(19 * u)
+    // 风按钮居中 + 四个小按钮围绕（射/网/弹/技），风比其他四个略大
+    const boostR = Math.round(32 * u)
+    const otherR = Math.round(22 * u)
+    const btnGap = Math.round(10 * u)
+    const dist = boostR + otherR + btnGap  // 小按钮中心到风中心的距离
+
+    // 风按钮中心（确保四向按钮都在屏幕内）
+    // 按钮簇整体半宽 = boostR + dist，两边至少留 12 边距
+    const pad = Math.round(12 * u)
+    const half = boostR + dist
+    const boostCx = Math.min(w - pad - half, w - Math.round(120 * u))
+    const boostCy = Math.min(h - pad - half, h - Math.round(130 * u))
+
+    // 四个小按钮：射(右上)、网(左上)、弹(左下)、技(右下)
+    const fireCx = boostCx + dist,              fireCy = boostCy - dist
+    const netCx  = boostCx - dist,              netCy  = boostCy - dist
+    const misCx  = boostCx - dist,              misCy  = boostCy + dist
+    const stCx   = boostCx + dist,              stCy   = boostCy + dist
 
     // 摇杆（左下角，位于雷达下方）
     const jsSize = Math.round(130 * u)
@@ -168,11 +183,11 @@ class Game {
       joystick: {
         base: { x: jsCx - jsSize / 2, y: jsCy - jsSize / 2, w: jsSize, h: jsSize }
       },
-      fire: circle(w - Math.round(90 * u), h - Math.round(173 * u), fireR),
-      boost: circle(w - Math.round(93 * u), h - Math.round(110 * u), boostR),
-      net: circle(w - Math.round(149 * u), h - Math.round(144 * u), smallR),
-      missile: circle(w - Math.round(140 * u), h - Math.round(105 * u), smallR),
-      stunt: circle(w - Math.round(90 * u), h - Math.round(59 * u), smallR),
+      boost: circle(boostCx, boostCy, boostR),
+      fire:  circle(fireCx,  fireCy,  otherR),
+      net:   circle(netCx,   netCy,   otherR),
+      missile: circle(misCx, misCy, otherR),
+      stunt: circle(stCx,    stCy,    otherR),
       stuntList: stuntList,
       hud: {
         pause: { x: Math.round(14 * u), y: 6, w: Math.round(70 * u), h: Math.round(28 * u) },
