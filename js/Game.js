@@ -8,6 +8,7 @@ const { CampaignManager, OBJECTIVE_TYPE } = require('./CampaignSystem')
 const { LootField, LOOT_TYPES, LOOT_COLORS, LOOT_NAMES } = require('./LootSystem')
 const { STUNT_TYPES, STUNT_DEFS } = require('./StuntSystem')
 const { ParticleSystem, distance, randomRange, normalizeAngle } = require('./utils')
+const { getMapTheme, DEFAULT_MAP_ID } = require('./Maps')
 
 // 游戏状态
 const GAME_STATE = {
@@ -27,6 +28,7 @@ class Game {
     this.state = GAME_STATE.MENU
     this.gameMode = CONSTS.GAME_MODE.PRACTICE
     this.aiCount = CONSTS.DEFAULT_AI_COUNT
+    this.mapId = DEFAULT_MAP_ID
 
     // 飞机列表
     this.player = null
@@ -139,9 +141,10 @@ class Game {
     }
   }
 
-  start(mode, aiCount) {
+  start(mode, aiCount, mapId) {
     this.gameMode = mode || CONSTS.GAME_MODE.PRACTICE
     this.aiCount = aiCount || CONSTS.DEFAULT_AI_COUNT
+    this.mapId = mapId || DEFAULT_MAP_ID
     
     this.state = GAME_STATE.PLAYING
     this.elapsed = 0
@@ -176,6 +179,9 @@ class Game {
     
     this.gameMode = 'campaign'
     this.aiCount = 0  // 由关卡配置决定
+    // 按章节加载对应地图
+    const chapter = this.campaign.getChapter(this.campaignLevel.chapter)
+    this.mapId = chapter ? chapter.mapId : DEFAULT_MAP_ID
     this.state = GAME_STATE.PLAYING
     this.elapsed = 0
     this.reinforcementsSpawned = false
@@ -777,21 +783,21 @@ class Game {
 
   _renderArena(ctx) {
     const radius = CONSTS.ARENA.RADIUS
+    const theme = getMapTheme(this.mapId)
 
-    // 战场边界
-    ctx.strokeStyle = CONSTS.COLORS.ARENA_BORDER
-    ctx.lineWidth = 4
-    ctx.setLineDash([20, 10])
+    // 战场底色与地图装饰（裁剪在圆形战场内）
+    ctx.save()
     ctx.beginPath()
     ctx.arc(0, 0, radius, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.setLineDash([])
+    ctx.clip()
+
+    ctx.fillStyle = theme.bg
+    ctx.fillRect(-radius, -radius, radius * 2, radius * 2)
 
     // 网格
-    ctx.strokeStyle = CONSTS.COLORS.ARENA_GRID
+    ctx.strokeStyle = theme.grid
     ctx.lineWidth = 1
-    ctx.globalAlpha = 0.3
-    
+    ctx.globalAlpha = 0.35
     const gridSize = 100
     for (let x = -radius; x <= radius; x += gridSize) {
       ctx.beginPath()
@@ -807,8 +813,22 @@ class Game {
     }
     ctx.globalAlpha = 1
 
+    // 地图主题装饰
+    theme.draw(ctx, radius)
+
+    ctx.restore()
+
+    // 战场边界
+    ctx.strokeStyle = theme.border
+    ctx.lineWidth = 4
+    ctx.setLineDash([20, 10])
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+
     // 中心标记
-    ctx.strokeStyle = '#555'
+    ctx.strokeStyle = 'rgba(120,120,150,0.7)'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.arc(0, 0, 30, 0, Math.PI * 2)
