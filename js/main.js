@@ -546,21 +546,25 @@ class MainApp {
     const L = this._menuLayout()
 
     if (this.menuState === 'main') {
-      // 标题整体（主标题+副标题）垂直居中于屏幕正中
+      // 主标题+副标题整体垂直居中，两行不重叠
       ctx.save()
       const bigFont = Math.round(h * 0.08)
       const subFont = Math.round(h * 0.032)
-      const gap = Math.round(h * 0.025)                              // 主副标题间距
-      const totalH = bigFont + gap + subFont
-      const baseY = h * 0.5 - totalH / 2 + bigFont                   // 主标题 baseline（middle）
+      const visualGap = Math.round(h * 0.025)                        // 两行之间的留白
+      // 用 alphabetic baseline：文字视觉大致占用 [y-ascent, y]
+      // 主标题底部 ≈ mainY，副标题顶部 ≈ subY - subFont
+      const totalVisualH = bigFont + visualGap + subFont              // 两行+留白的总高
+      const groupTop = h * 0.5 - totalVisualH / 2                    // 组的顶端
+      const mainY = groupTop + bigFont                                // 主标题 baseline
+      const subY  = mainY + visualGap + subFont                       // 副标题 baseline
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'alphabetic'
       ctx.fillStyle = '#fff'
       ctx.font = `bold ${bigFont}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('纸飞机大战', w / 2, baseY)
+      ctx.fillText('纸飞机大战', w / 2, mainY)
       ctx.fillStyle = '#8a8a9a'
       ctx.font = `${subFont}px sans-serif`
-      ctx.fillText('Paper Plane Battle', w / 2, baseY + gap + subFont / 2)
+      ctx.fillText('Paper Plane Battle', w / 2, subY)
       ctx.restore()
 
       const labels = ['对战模式', '战役模式', '联机模式', '操作说明']
